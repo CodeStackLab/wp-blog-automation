@@ -1,0 +1,1917 @@
+const express = require('express');
+const session = require('express-session');
+const bodyParser = require('body-parser');
+const axios = require('axios');
+const bcrypt = require('bcryptjs');
+const path = require('path');
+const fs = require('fs');
+const cron = require('node-cron');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
+    resave: true,
+    saveUninitialized: true,
+    cookie: {
+        secure: false, // Set to true if using HTTPS
+        httpOnly: true,
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    }
+}));
+
+// In-memory storage (replace with database in production)
+const CONFIG_FILE = path.join(__dirname, 'config.json');
+
+// Default Configuration
+const defaultConfig = {
+    wordpress: {
+        siteUrl: '',
+        username: '',
+        appPassword: ''
+    },
+    openai: {
+        apiKey: '',
+        contentModel: 'gpt-4o',
+        imageModel: 'gpt-image-1.5'
+    },
+    imageGeneration: {
+        featuredEnabled: true,
+        inlineEnabled: false,
+        inlineFrequency: 2,
+        size: '1200x628',
+        quality: 'hd',
+        style: 'vivid',
+        provider: 'dalle',
+    },
+    youtube: {
+        apiKey: '',
+        enabled: false,
+        frequency: 3
+    },
+    stockImages: {
+        unsplashApiKey: '',
+        pexelsApiKey: '',
+        pixabayApiKey: ''
+    },
+    tinymce: {
+        apiKey: 'zqwjq3mg6oca4mssnuouk3ecc2am2az9smwd8fhs97mkr80t'
+    },
+    automation: {
+        enabled: false,
+        schedule: 'daily',
+        minutesInterval: 5,
+        dailyArticleLimit: 5,
+        keywords: [],
+        autoCreateCategories: true,
+        autoCreateTags: true,
+        cronExpression: '0 9 * * *'
+    },
+    content: {
+        defaultKeywords: '',
+        customPrompt: '',
+        imageCustomPrompt: '',
+        articleLength: '1000-1500',
+        imagesPerPost: 1,
+        includeInternalLinks: true,
+        internalLinksCount: 3,
+        includeReadAlso: true,
+        readAlsoCount: 3,
+        includeCallToAction: true,
+        callToActionText: 'Learn more',
+        callToActionUrl: '',
+        includeOutboundLinks: true,
+        outboundLinksCount: 2,
+        articleInstructions: ''
+    },
+    dashboardPreferences: {
+        customPrompt: '',
+        internalLinksCount: 3,
+        outboundLinksCount: 2,
+        imagesCount: 1,
+        readAlsoCount: 3
+    }
+};
+
+// Initialize config - Deep clone default
+let config = JSON.parse(JSON.stringify(defaultConfig));
+
+// Load saved config
+if (fs.existsSync(CONFIG_FILE)) {
+    try {
+        console.log('Loading configuration from', CONFIG_FILE);
+        const savedConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+
+        // Robust merge
+        ['wordpress', 'openai', 'imageGeneration', 'youtube', 'stockImages', 'automation', 'content', 'dashboardPreferences'].forEach(key => {
+            if (savedConfig[key]) {
+                config[key] = { ...config[key], ...savedConfig[key] };
+            }
+        });
+
+    } catch (error) {
+        console.error('Error loading config file:', error);
+    }
+}
+
+function saveConfig() {
+    try {
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+        console.log('Saved configuration to disk');
+    } catch (error) {
+        console.error('Error saving config:', error);
+    }
+}
+
+
+
+
+let articles = [];
+let schedulers = []; // Array to support multiple staggered schedules
+
+// Automation Task Runner
+async function runSingleAutomationTask() {
+    console.log('Running single article automation task...');
+
+    // Pick a keyword/topic
+    let topic = '';
+    if (config.content.defaultKeywords && config.content.defaultKeywords.length > 0) {
+        // Parse keywords
+        const keywords = config.content.defaultKeywords.split(',').map(k => k.trim()).filter(k => k);
+        if (keywords.length > 0) {
+            topic = keywords[Math.floor(Math.random() * keywords.length)];
+        }
+    }
+
+    if (!topic) {
+        console.log('No keywords configured for automation.');
+        return;
+    }
+
+    console.log(`Generating article for topic: ${topic}`);
+
+    try {
+        // 3. Generate Content (Reuse logic from /api/generate-article but via internal call or refactoring)
+        // For simplicity, we'll verify credentials first
+        if (!config.openai.apiKey || !config.wordpress.siteUrl) {
+            console.log('Missing API Key or WP URL');
+            return;
+        }
+
+        // Generate Article logic
+        const articleData = await generateArticleLogic({
+            topic: topic,
+            keywords: topic,
+            tone: 'professional',
+            length: config.content.articleLength,
+            customPrompt: config.content.customPrompt,
+            imageProvider: config.imageGeneration.provider,
+            featuredEnabled: config.imageGeneration.featuredEnabled, // Pass new flags
+            inlineEnabled: config.imageGeneration.inlineEnabled,
+            inlineFrequency: config.imageGeneration.inlineFrequency,
+            youtubeEnabled: config.youtube.enabled,
+            youtubeFrequency: config.youtube.frequency,
+            autoTags: config.automation.autoCreateTags
+        });
+
+        // Publish to WordPress logic
+        const auth = Buffer.from(`${config.wordpress.username}:${config.wordpress.appPassword}`).toString('base64');
+
+        const postData = {
+            title: articleData.title,
+            content: articleData.content,
+            status: 'publish',
+            tags: [],
+            featured_media: undefined // We need to handle this below
+        };
+
+        // Handle Featured Image Upload if URL exists
+        if (articleData.featuredImageUrl) {
+            try {
+                // Upload featured image
+                const imgRes = await axios.get(articleData.featuredImageUrl, { responseType: 'arraybuffer' });
+                const imgBuffer = Buffer.from(imgRes.data, 'binary');
+
+                const uploadRes = await axios.post(`${config.wordpress.siteUrl}/wp-json/wp/v2/media`, imgBuffer, {
+                    headers: {
+                        'Authorization': `Basic ${auth}`,
+                        'Content-Type': 'image/png',
+                        'Content-Disposition': `attachment; filename="featured-${Date.now()}.png"`
+                    }
+                });
+
+                postData.featured_media = uploadRes.data.id;
+            } catch (err) {
+                console.error('Failed to upload featured image:', err.message);
+            }
+        }
+
+        const wpRes = await axios.post(`${config.wordpress.siteUrl}/wp-json/wp/v2/posts`, postData, {
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        // Log success
+        articles.unshift({
+            id: wpRes.data.id,
+            title: wpRes.data.title.rendered,
+            status: wpRes.data.status,
+            link: wpRes.data.link,
+            date: new Date()
+        });
+
+        console.log(`Successfully published article: ${articleData.title} (ID: ${wpRes.data.id})`);
+
+    } catch (error) {
+        console.error('Automation task failed:', error.message);
+    }
+}
+
+// Scheduler management
+
+function initializeScheduler() {
+    // Stop existing schedulers
+    if (schedulers.length > 0) {
+        schedulers.forEach(s => s.stop());
+        schedulers = [];
+    }
+
+    if (!config.automation.enabled) {
+        console.log('Automation disabled');
+        return;
+    }
+
+    const dailyLimit = config.automation.dailyArticleLimit || 1;
+
+    // Calculate time slots for staggered publishing
+    // Distribute articles evenly throughout the day (9 AM to 9 PM = 12 hours)
+    const startHour = 9;  // 9 AM
+    const endHour = 21;   // 9 PM
+    const totalHours = endHour - startHour;
+
+    // Calculate hour intervals
+    const hourGap = dailyLimit > 1 ? totalHours / (dailyLimit - 1) : 0;
+
+    console.log(`\n🕐 Setting up ${dailyLimit} staggered schedules throughout the day:`);
+
+    for (let i = 0; i < dailyLimit; i++) {
+        let hour;
+        if (dailyLimit === 1) {
+            hour = startHour; // Single article at 9 AM
+        } else {
+            hour = Math.floor(startHour + (i * hourGap));
+        }
+
+        // Create cron expression for this time slot (minute hour * * *)
+        const cronExp = `0 ${hour} * * *`;
+
+        const timeStr = `${hour}:00`;
+        console.log(`  📅 Schedule ${i + 1}/${dailyLimit}: ${timeStr} (cron: ${cronExp})`);
+
+        const scheduler = cron.schedule(cronExp, () => {
+            console.log(`\n⏰ Running scheduled article generation (slot ${i + 1}/${dailyLimit} at ${timeStr})`);
+            runSingleAutomationTask();
+        });
+
+        scheduler.start();
+        schedulers.push(scheduler);
+    }
+
+    console.log(`\n✅ Staggered scheduling active: ${dailyLimit} articles will publish throughout the day\n`);
+}
+
+function manageScheduler() {
+    initializeScheduler();
+}
+
+// Authentication middleware
+const requireAuth = (req, res, next) => {
+    if (req.session.authenticated) {
+        next();
+    } else {
+        res.redirect('/login');
+    }
+};
+
+// Routes
+app.get('/', requireAuth, (req, res) => {
+    res.render('dashboard', {
+        config,
+        articles: articles.slice(0, 10),
+        user: req.session.user
+    });
+});
+
+app.get('/login', (req, res) => {
+    res.render('login', { error: null });
+});
+
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+
+    // Default credentials (change these!)
+    const defaultUsername = process.env.ADMIN_USERNAME || 'admin';
+    const defaultPassword = process.env.ADMIN_PASSWORD || 'admin123';
+
+    if (username === defaultUsername && password === defaultPassword) {
+        req.session.authenticated = true;
+        req.session.user = username;
+
+        // Explicitly save session before redirect
+        req.session.save((err) => {
+            if (err) {
+                console.error('Session save error:', err);
+                return res.render('login', { error: 'Login failed. Please try again.' });
+            }
+            res.redirect('/');
+        });
+    } else {
+        res.render('login', { error: 'Invalid credentials' });
+    }
+});
+
+app.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.redirect('/login');
+});
+
+app.get('/settings', requireAuth, (req, res) => {
+    res.render('settings', { config });
+});
+
+// API Routes
+app.get('/api/config', requireAuth, (req, res) => {
+    // Hide sensitive keys
+    const safeConfig = JSON.parse(JSON.stringify(config));
+    safeConfig.wordpress.appPassword = config.wordpress.appPassword ? '********' : '';
+    safeConfig.openai.apiKey = config.openai.apiKey ? '********' : '';
+    safeConfig.stockImages.unsplashApiKey = config.stockImages.unsplashApiKey ? '********' : '';
+    safeConfig.stockImages.pexelsApiKey = config.stockImages.pexelsApiKey ? '********' : '';
+    safeConfig.stockImages.pixabayApiKey = config.stockImages.pixabayApiKey ? '********' : '';
+    safeConfig.youtube.apiKey = config.youtube.apiKey ? '********' : '';
+    res.json(safeConfig);
+});
+
+app.post('/api/settings', requireAuth, async (req, res) => {
+    try {
+        const {
+            wpSiteUrl, wpUsername, wpAppPassword,
+            openaiApiKey, contentModel, imageModel,
+            imageFeaturedEnabled, imageInlineEnabled, imageInlineFrequency, imageSize, imageQuality, imageStyle, imageProvider, // Updated image params
+            youtubeApiKey, youtubeEnabled, youtubeFrequency, // New YouTube params
+            unsplashApiKey, pexelsApiKey, pixabayApiKey,
+            defaultKeywords, customPrompt, imageCustomPrompt, imagesPerPost, articleLength,
+            includeInternalLinks, internalLinksCount, includeReadAlso, readAlsoCount,
+            includeCallToAction, callToActionText, callToActionUrl,
+            includeOutboundLinks, outboundLinksCount, articleInstructions,
+            dailyArticleLimit,
+            cronExpression,
+            // New automation settings
+            automationEnabled, automationSchedule, autoCreateCategories, autoCreateTags
+        } = req.body;
+
+        if (wpSiteUrl !== undefined) config.wordpress.siteUrl = wpSiteUrl;
+        if (wpUsername !== undefined) config.wordpress.username = wpUsername;
+        if (wpAppPassword && wpAppPassword !== '********') config.wordpress.appPassword = wpAppPassword;
+
+        if (openaiApiKey && openaiApiKey !== '********') config.openai.apiKey = openaiApiKey;
+        if (contentModel !== undefined) config.openai.contentModel = contentModel;
+        if (imageModel !== undefined) config.openai.imageModel = imageModel;
+
+        // Image Settings
+        if (imageFeaturedEnabled !== undefined) config.imageGeneration.featuredEnabled = imageFeaturedEnabled;
+        if (imageInlineEnabled !== undefined) config.imageGeneration.inlineEnabled = imageInlineEnabled;
+        if (imageInlineFrequency !== undefined) config.imageGeneration.inlineFrequency = parseInt(imageInlineFrequency) || 2;
+        if (imageSize !== undefined) config.imageGeneration.size = imageSize;
+        if (imageQuality !== undefined) config.imageGeneration.quality = imageQuality;
+        if (imageStyle !== undefined) config.imageGeneration.style = imageStyle;
+        if (imageProvider !== undefined) config.imageGeneration.provider = imageProvider;
+
+        // YouTube Settings
+        if (youtubeApiKey && youtubeApiKey !== '********') config.youtube.apiKey = youtubeApiKey;
+        if (youtubeEnabled !== undefined) config.youtube.enabled = youtubeEnabled;
+        if (youtubeFrequency !== undefined) config.youtube.frequency = parseInt(youtubeFrequency) || 3;
+
+        if (unsplashApiKey && unsplashApiKey !== '********') config.stockImages.unsplashApiKey = unsplashApiKey;
+        if (pexelsApiKey && pexelsApiKey !== '********') config.stockImages.pexelsApiKey = pexelsApiKey;
+        if (pixabayApiKey && pixabayApiKey !== '********') config.stockImages.pixabayApiKey = pixabayApiKey;
+
+        if (defaultKeywords !== undefined) config.content.defaultKeywords = defaultKeywords;
+        if (customPrompt !== undefined) config.content.customPrompt = customPrompt;
+        if (imageCustomPrompt !== undefined) config.content.imageCustomPrompt = imageCustomPrompt;
+        if (articleLength !== undefined) config.content.articleLength = articleLength;
+        if (imagesPerPost !== undefined) config.content.imagesPerPost = parseInt(imagesPerPost) || 1;
+        if (includeInternalLinks !== undefined) config.content.includeInternalLinks = includeInternalLinks;
+        if (internalLinksCount !== undefined) config.content.internalLinksCount = parseInt(internalLinksCount) || 3;
+        if (includeReadAlso !== undefined) config.content.includeReadAlso = includeReadAlso;
+        if (readAlsoCount !== undefined) config.content.readAlsoCount = parseInt(readAlsoCount) || 3;
+        if (includeCallToAction !== undefined) config.content.includeCallToAction = includeCallToAction;
+        if (callToActionText !== undefined) config.content.callToActionText = callToActionText;
+        if (callToActionUrl !== undefined) config.content.callToActionUrl = callToActionUrl;
+        if (includeOutboundLinks !== undefined) config.content.includeOutboundLinks = includeOutboundLinks;
+        if (outboundLinksCount !== undefined) config.content.outboundLinksCount = parseInt(outboundLinksCount) || 2;
+        if (articleInstructions !== undefined) config.content.articleInstructions = articleInstructions;
+        if (dailyArticleLimit !== undefined) config.automation.dailyArticleLimit = parseInt(dailyArticleLimit) || 5;
+
+        // Automation Settings
+        if (automationEnabled !== undefined) config.automation.enabled = automationEnabled;
+        if (automationSchedule !== undefined) config.automation.schedule = automationSchedule;
+        if (cronExpression !== undefined) config.automation.cronExpression = cronExpression;
+        if (autoCreateCategories !== undefined) config.automation.autoCreateCategories = autoCreateCategories;
+        if (autoCreateTags !== undefined) config.automation.autoCreateTags = autoCreateTags;
+
+        saveConfig(); // Persist changes
+
+        // Restart scheduler if automation settings changed
+        if (automationEnabled !== undefined || automationSchedule !== undefined || cronExpression !== undefined) {
+            manageScheduler();
+        }
+
+        res.json({ success: true, message: 'Settings saved successfully' });
+    } catch (error) {
+        console.error('Error saving settings:', error);
+        res.status(500).json({ success: false, message: 'Failed to save settings' });
+    }
+});
+
+// New Endpoint: Save Dashboard Preferences (Isolated from global settings)
+app.post('/api/save-dashboard-preferences', requireAuth, async (req, res) => {
+    try {
+        const { customPrompt, internalLinksCount, outboundLinksCount, imagesCount, readAlsoCount } = req.body;
+
+        // Update dashboard-specific config
+        config.dashboardPreferences = {
+            customPrompt: customPrompt !== undefined ? customPrompt : config.dashboardPreferences.customPrompt,
+            internalLinksCount: parseInt(internalLinksCount) || 3,
+            outboundLinksCount: parseInt(outboundLinksCount) || 2,
+            imagesCount: parseInt(imagesCount) || 1,
+            readAlsoCount: parseInt(readAlsoCount) || 3
+        };
+
+        saveConfig();
+        res.json({ success: true, message: 'Dashboard preferences saved successfully' });
+    } catch (error) {
+        console.error('Error saving dashboard preferences:', error);
+        res.status(500).json({ success: false, message: 'Failed to save preferences' });
+    }
+});
+
+app.post('/api/test-wordpress', requireAuth, async (req, res) => {
+    try {
+        const { wpSiteUrl, wpUsername, wpAppPassword } = req.body;
+
+        const auth = Buffer.from(`${wpUsername}:${wpAppPassword}`).toString('base64');
+        const response = await axios.get(`${wpSiteUrl}/wp-json/wp/v2/users/me`, {
+            headers: {
+                'Authorization': `Basic ${auth}`
+            }
+        });
+
+        res.json({ success: true, message: 'WordPress connection successful', data: response.data });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'WordPress connection failed: ' + error.message
+        });
+    }
+});
+
+// Fetch WordPress categories
+app.get('/api/wordpress/categories', requireAuth, async (req, res) => {
+    try {
+        if (!config.wordpress.siteUrl || !config.wordpress.username || !config.wordpress.appPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'WordPress credentials not configured'
+            });
+        }
+
+        const auth = Buffer.from(`${config.wordpress.username}:${config.wordpress.appPassword}`).toString('base64');
+        const response = await axios.get(`${config.wordpress.siteUrl}/wp-json/wp/v2/categories?per_page=100`, {
+            headers: {
+                'Authorization': `Basic ${auth}`
+            }
+        });
+
+        res.json({
+            success: true,
+            categories: response.data.map(cat => ({
+                id: cat.id,
+                name: cat.name,
+                slug: cat.slug,
+                count: cat.count
+            }))
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch categories: ' + error.message
+        });
+    }
+});
+
+// Fetch WordPress tags
+app.get('/api/wordpress/tags', requireAuth, async (req, res) => {
+    try {
+        if (!config.wordpress.siteUrl || !config.wordpress.username || !config.wordpress.appPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'WordPress credentials not configured'
+            });
+        }
+
+        const auth = Buffer.from(`${config.wordpress.username}:${config.wordpress.appPassword}`).toString('base64');
+        const response = await axios.get(`${config.wordpress.siteUrl}/wp-json/wp/v2/tags?per_page=100`, {
+            headers: {
+                'Authorization': `Basic ${auth}`
+            }
+        });
+
+        res.json({
+            success: true,
+            tags: response.data.map(tag => ({
+                id: tag.id,
+                name: tag.name,
+                slug: tag.slug,
+                count: tag.count
+            }))
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch tags: ' + error.message
+        });
+    }
+});
+
+// Create or get category
+app.post('/api/wordpress/category', requireAuth, async (req, res) => {
+    try {
+        const { name } = req.body;
+
+        if (!config.wordpress.siteUrl || !config.wordpress.username || !config.wordpress.appPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'WordPress credentials not configured'
+            });
+        }
+
+        const auth = Buffer.from(`${config.wordpress.username}:${config.wordpress.appPassword}`).toString('base64');
+
+        // First, try to find existing category
+        const searchResponse = await axios.get(
+            `${config.wordpress.siteUrl}/wp-json/wp/v2/categories?search=${encodeURIComponent(name)}`,
+            {
+                headers: { 'Authorization': `Basic ${auth}` }
+            }
+        );
+
+        // Check if exact match exists
+        const existingCategory = searchResponse.data.find(cat =>
+            cat.name.toLowerCase() === name.toLowerCase()
+        );
+
+        if (existingCategory) {
+            return res.json({
+                success: true,
+                category: {
+                    id: existingCategory.id,
+                    name: existingCategory.name,
+                    slug: existingCategory.slug
+                },
+                created: false
+            });
+        }
+
+        // Create new category
+        const createResponse = await axios.post(
+            `${config.wordpress.siteUrl}/wp-json/wp/v2/categories`,
+            { name: name },
+            {
+                headers: {
+                    'Authorization': `Basic ${auth}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        res.json({
+            success: true,
+            category: {
+                id: createResponse.data.id,
+                name: createResponse.data.name,
+                slug: createResponse.data.slug
+            },
+            created: true
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create/get category: ' + error.message
+        });
+    }
+});
+
+// Create or get tag
+app.post('/api/wordpress/tag', requireAuth, async (req, res) => {
+    try {
+        const { name } = req.body;
+
+        if (!config.wordpress.siteUrl || !config.wordpress.username || !config.wordpress.appPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'WordPress credentials not configured'
+            });
+        }
+
+        const auth = Buffer.from(`${config.wordpress.username}:${config.wordpress.appPassword}`).toString('base64');
+
+        // First, try to find existing tag
+        const searchResponse = await axios.get(
+            `${config.wordpress.siteUrl}/wp-json/wp/v2/tags?search=${encodeURIComponent(name)}`,
+            {
+                headers: { 'Authorization': `Basic ${auth}` }
+            }
+        );
+
+        // Check if exact match exists
+        const existingTag = searchResponse.data.find(tag =>
+            tag.name.toLowerCase() === name.toLowerCase()
+        );
+
+        if (existingTag) {
+            return res.json({
+                success: true,
+                tag: {
+                    id: existingTag.id,
+                    name: existingTag.name,
+                    slug: existingTag.slug
+                },
+                created: false
+            });
+        }
+
+        // Create new tag
+        const createResponse = await axios.post(
+            `${config.wordpress.siteUrl}/wp-json/wp/v2/tags`,
+            { name: name },
+            {
+                headers: {
+                    'Authorization': `Basic ${auth}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        res.json({
+            success: true,
+            tag: {
+                id: createResponse.data.id,
+                name: createResponse.data.name,
+                slug: createResponse.data.slug
+            },
+            created: true
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create/get tag: ' + error.message
+        });
+    }
+});
+
+// Helper: Search Stock Images
+async function searchStockImages(provider, query, count = 1) {
+    try {
+        let images = [];
+
+        if (provider === 'unsplash' && config.stockImages.unsplashApiKey) {
+            const response = await axios.get(`https://api.unsplash.com/search/photos`, {
+                params: { query, per_page: count, orientation: 'landscape' },
+                headers: { 'Authorization': `Client-ID ${config.stockImages.unsplashApiKey}` }
+            });
+            images = response.data.results.map(img => ({
+                url: img.urls.regular,
+                credit: `Photo by ${img.user.name} on Unsplash`,
+                source: 'Unsplash'
+            }));
+        } else if (provider === 'pexels' && config.stockImages.pexelsApiKey) {
+            const response = await axios.get(`https://api.pexels.com/v1/search`, {
+                params: { query, per_page: count, orientation: 'landscape' },
+                headers: { 'Authorization': config.stockImages.pexelsApiKey }
+            });
+            images = response.data.photos.map(img => ({
+                url: img.src.large,
+                credit: `Photo by ${img.photographer} on Pexels`,
+                source: 'Pexels'
+            }));
+        } else if (provider === 'pixabay' && config.stockImages.pixabayApiKey) {
+            const response = await axios.get(`https://pixabay.com/api/`, {
+                params: {
+                    key: config.stockImages.pixabayApiKey,
+                    q: query,
+                    per_page: count,
+                    orientation: 'horizontal',
+                    image_type: 'photo'
+                }
+            });
+            images = response.data.hits.map(img => ({
+                url: img.largeImageURL,
+                credit: `Image by ${img.user} from Pixabay`,
+                source: 'Pixabay'
+            }));
+        }
+
+        return images;
+    } catch (error) {
+        console.error(`Error fetching stock images from ${provider}:`, error.message);
+        return [];
+    }
+}
+
+// Helper: Search YouTube Videos
+async function searchYoutubeVideos(query, count = 1) {
+    try {
+        if (!config.youtube.apiKey) return [];
+
+        const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+            params: {
+                part: 'snippet',
+                q: query,
+                key: config.youtube.apiKey,
+                type: 'video',
+                maxResults: count
+            }
+        });
+
+        return response.data.items.map(item => ({
+            id: item.id.videoId,
+            title: item.snippet.title,
+            thumbnail: item.snippet.thumbnails.high.url
+        }));
+    } catch (error) {
+        console.error('Error searching YouTube:', error.message);
+        return [];
+    }
+}
+
+// Helper: Check if provider is AI-based
+function isAIProvider(provider) {
+    const aiProviders = ['dalle', 'dall-e-2', 'dall-e-3', 'gpt-image-1.5', 'gpt-image-1', 'gpt-image-1-mini', 'chatgpt-image-latest'];
+    return aiProviders.includes(provider);
+}
+
+// Search Stock Images Endpoint
+app.get('/api/stock-images/search', requireAuth, async (req, res) => {
+    try {
+        const { provider, query, count } = req.query;
+
+        if (!provider || !query) {
+            return res.status(400).json({ success: false, message: 'Provider and query are required' });
+        }
+
+        const images = await searchStockImages(provider, query, parseInt(count) || 10);
+        res.json({ success: true, images });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to search images: ' + error.message });
+    }
+});
+
+async function generateArticleLogic(params) {
+    const { topic, keywords, tone, length, customPrompt, imageProvider,
+        featuredEnabled, inlineEnabled, inlineFrequency,
+        youtubeEnabled, youtubeFrequency,
+        autoTags, customTags,
+        // New overrides
+        apiKey, contentModel, imageModel,
+        includeInternalLinks, internalLinksCount,
+        includeOutboundLinks, outboundLinksCount,
+        includeCallToAction, callToActionText, callToActionUrl,
+        includeReadAlso, readAlsoCount,
+        imagesPerPost // Added parameter
+    } = params;
+
+    // --- Configuration Overrides ---
+    // Use params if provided, otherwise fall back to global config
+    const effectiveApiKey = apiKey || config.openai.apiKey;
+    const effectiveContentModel = contentModel || config.openai.contentModel || 'gpt-4';
+
+    const effectiveFeatured = featuredEnabled !== undefined ? featuredEnabled : config.imageGeneration.featuredEnabled;
+    const effectiveInline = inlineEnabled !== undefined ? inlineEnabled : config.imageGeneration.inlineEnabled;
+    const effectiveInlineFreq = inlineFrequency || config.imageGeneration.inlineFrequency || 2;
+    const effectiveYoutube = youtubeEnabled !== undefined ? youtubeEnabled : config.youtube.enabled;
+    const effectiveYoutubeFreq = youtubeFrequency || config.youtube.frequency || 3;
+    const provider = imageProvider || config.imageGeneration.provider || 'dalle';
+
+    const effectivePrompt = customPrompt || config.content.customPrompt || '';
+    const effectiveLength = length || config.content.articleLength || '1000-1500';
+
+    // SEO Overrides
+    const effectiveInternalLinks = includeInternalLinks !== undefined ? includeInternalLinks : config.content.includeInternalLinks;
+    const effectiveInternalCount = internalLinksCount || config.content.internalLinksCount || 3;
+    const effectiveOutboundLinks = includeOutboundLinks !== undefined ? includeOutboundLinks : config.content.includeOutboundLinks;
+
+    const effectiveOutboundCount = outboundLinksCount || config.content.outboundLinksCount || 2;
+
+    // Image Count Override
+    const effectiveImageCount = imagesPerPost || config.content.imagesPerPost || 3;
+
+    // --- System Prompt Construction ---
+    let systemPrompt = `You are a professional content writer. Write a ${effectiveLength} words blog post about "${topic}".`;
+
+    if (effectivePrompt) {
+        systemPrompt += `\nCustom Instructions: ${effectivePrompt}`;
+    }
+
+    systemPrompt += `\nKeywords to include: ${keywords || 'N/A'}
+    Tone: ${tone || 'professional'}
+    
+    Structuring Requirements:
+    1. Engaging Title
+    2. Compelling Introduction
+    3. Well-structured body with H2 and H3 subheadings
+    4. Conclusion
+    
+    IMPORTANT: Format the response as a strict JSON object with the following keys:
+    - title: string
+    - content: string (HTML format, use <h2>, <h3>, <p>, <ul>, <li> tags)
+    - tags: array of strings (relevant tags for the post)`;
+
+    if (effectiveFeatured) {
+        systemPrompt += `
+    - featured_image_prompt: string (description for the featured image)`;
+    }
+
+    // Inline Images Instruction
+    if (effectiveInline) {
+        systemPrompt += `
+        
+        INLINE IMAGE INSTRUCTIONS:
+        Insert the text "[IMAGE_PLACEHOLDER: <detailed description>]" in the content according to these EXACT rules:
+        1. Insert 1st image after the FIRST Heading 2 (H2).
+        2. Insert 2nd image after the THIRD Heading 2 (H2).
+        3. Insert 3rd image after the FIFTH Heading 2 (H2) (if article is long enough).
+        - The description inside the placeholder should be optimized for searching stock photos or generating AI images.`;
+    }
+
+    if (effectiveYoutube) {
+        systemPrompt += `\n\nVIDEO INSTRUCTIONS:\nInsert "[VIDEO_PLACEHOLDER: <search query>]" at the very end of the article, before the Conclusion.`;
+    }
+
+
+
+    if (effectiveInternalLinks) {
+        systemPrompt += `\n\nINTERNAL LINKING:\nIdentify ${effectiveInternalCount} opportunities to link to related content on the site. Use the format [INTERNAL_LINK: <anchor text> | <target topic>] so they can be replaced later.`;
+    }
+
+    if (effectiveOutboundLinks) {
+        systemPrompt += `\n\nOUTBOUND LINKING:\nInclude ${effectiveOutboundCount} references to authoritative sources. Use the format [OUTBOUND_LINK: <anchor text> | <suggested url or domain>] so they can be reviewed.`;
+    }
+
+    // --- Content Generation ---
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: effectiveContentModel,
+        messages: [
+            { role: 'system', content: 'You are a helpful assistant that outputs JSON.' },
+            { role: 'user', content: systemPrompt }
+        ],
+        temperature: 0.7,
+        stream: false // This logic function is the underlying generation, streaming is handled by the wrapper if needed, but for now we keep this awaiting full response or simple chunks? 
+        // WAIT: The user wants streaming. This function is called by the streaming endpoint? 
+        // NO, the streaming endpoint handles its OWN call to OpenAI if it wants true streaming.
+        // Let's check the streaming endpoint.
+    }, {
+        headers: {
+            'Authorization': `Bearer ${effectiveApiKey}`,
+            'Content-Type': 'application/json'
+        }
+    });
+
+    // ... Parsing logic remains similar but uses effective params ...
+    let contentObj;
+    try {
+        let rawContent = response.data.choices[0].message.content;
+        rawContent = rawContent.trim();
+        if (rawContent.startsWith('```')) {
+            rawContent = rawContent.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+        }
+        contentObj = JSON.parse(rawContent);
+    } catch (e) {
+        console.error("Failed to parse JSON response", e);
+        contentObj = {
+            title: `Article about ${topic}`,
+            content: `<p>${response.data.choices[0].message.content}</p>`,
+            tags: []
+        };
+    }
+
+    let processedContent = contentObj.content;
+    let featuredImageUrl = '';
+
+    // --- 1. Featured Image Generation ---
+    if (effectiveFeatured) {
+        const prompt = contentObj.featured_image_prompt || `Featured image for article about ${topic}`;
+        try {
+            if (isAIProvider(provider)) {
+                let actualModel = params.imageModel || config.openai.imageModel || 'dall-e-3';
+                // ... mapping logic ...
+                if (actualModel.includes('gpt-image') || actualModel === 'chatgpt-image-latest') {
+                    actualModel = 'dall-e-3';
+                }
+
+                const imageConfig = {
+                    model: actualModel,
+                    prompt: prompt,
+                    n: 1,
+                    size: '1024x1024'
+                };
+
+                if (actualModel === 'dall-e-3') {
+                    imageConfig.quality = 'standard';
+                    imageConfig.style = 'vivid';
+                }
+
+                const aiRes = await axios.post('https://api.openai.com/v1/images/generations', imageConfig, {
+                    headers: { 'Authorization': `Bearer ${effectiveApiKey}` }
+                });
+                featuredImageUrl = aiRes.data.data[0].url;
+            } else {
+                // Stock photo logic
+                featuredImageUrl = await getStockImage(prompt, provider);
+            }
+        } catch (err) {
+            console.error('Featured image error:', err.message);
+        }
+    }
+
+    return {
+        title: contentObj.title,
+        content: processedContent,
+        tags: autoTags ? (contentObj.tags || []) : [],
+        featuredImage: featuredImageUrl
+        // ... return other fields as needed
+    };
+
+    // --- 2. Inline Image Processing (Placeholders) ---
+    if (effectiveInline) {
+        const placeholderRegex = /\[IMAGE_PLACEHOLDER:\s*(.*?)\]/g;
+        let match;
+        let replacements = [];
+
+        while ((match = placeholderRegex.exec(processedContent)) !== null) {
+            replacements.push({ fullMatch: match[0], query: match[1] });
+        }
+
+        for (const item of replacements) {
+            let imageUrl = '';
+            try {
+                if (isAIProvider(provider)) {
+                    // Map GPT Image models to actual DALL-E models
+                    let actualModel = config.openai.imageModel || 'dall-e-3';
+                    if (actualModel.includes('gpt-image') || actualModel === 'chatgpt-image-latest') {
+                        actualModel = 'dall-e-3';
+                    }
+
+                    const imageConfig = {
+                        model: actualModel,
+                        prompt: item.query,
+                        n: 1,
+                        size: '1024x1024'
+                    };
+
+                    // Only dall-e-3 supports quality and style
+                    if (actualModel === 'dall-e-3') {
+                        imageConfig.quality = config.imageGeneration.quality || 'standard';
+                        imageConfig.style = config.imageGeneration.style || 'vivid';
+                    }
+
+                    const aiRes = await axios.post('https://api.openai.com/v1/images/generations', imageConfig, {
+                        headers: { 'Authorization': `Bearer ${config.openai.apiKey}` }
+                    });
+                    imageUrl = aiRes.data.data[0].url;
+                } else {
+                    const stockImages = await searchStockImages(provider, item.query, 1);
+                    if (stockImages.length > 0) imageUrl = stockImages[0].url;
+                }
+
+                if (imageUrl) {
+                    processedContent = processedContent.replace(item.fullMatch,
+                        `<figure><img src="${imageUrl}" alt="${item.query}" class="article-image"></figure>`);
+                } else {
+                    processedContent = processedContent.replace(item.fullMatch, '');
+                }
+            } catch (e) {
+                console.error('Inline Image Error:', e.message);
+                if (e.response) {
+                    console.error('API Error Response:', e.response.data);
+                }
+                processedContent = processedContent.replace(item.fullMatch, '');
+            }
+        }
+    }
+
+    // --- 3. YouTube Embed Processing (Deterministic Injection) ---
+    if (effectiveYoutube && config.youtube.apiKey) {
+        // Simple logic: Split by </h2>. insert embed after every N matches.
+        // We need to extract the Heading text to search for a relevant video!
+
+        let parts = processedContent.split('</h2>');
+        let newContent = '';
+
+        // Loop through parts (each part ends with </h2> except the last one technically if we split)
+        // Wait, split removes the delimiter. capturing group keeps it?
+        // Better: Replace with a callback or iterator.
+
+        // Let's use regex to match <h2>(.*?)</h2>
+        // We want to insert AFTER the closing tag.
+
+        // A safer way: rebuild content
+        let headingCount = 0;
+        const regex = /<h2(.*?)>(.*?)<\/h2>/gi;
+        let lastIndex = 0;
+        let match;
+        let builtContent = '';
+
+        // We need to handle async in loop. 
+        // regex.exec is sync, but we need to await search.
+        // We'll collect all matches first to avoid infinite loops if we modify string.
+
+        // Actually, simple split is easier if we accept strictly structure.
+        // But let's try a replacement strategy that builds a new string.
+
+        // Alternative: Use Cheerio? No, adds dependency.
+        // Let's try matching all H2s, getting their indices and text.
+
+        let matches = [];
+        while ((match = regex.exec(processedContent)) !== null) {
+            matches.push({
+                full: match[0],
+                text: match[2].replace(/<[^>]*>/g, ''), // Clean HTML tags from heading text
+                index: match.index,
+                length: match[0].length
+            });
+        }
+
+        if (matches.length > 0) {
+            let lastCursor = 0;
+            for (let i = 0; i < matches.length; i++) {
+                headingCount++;
+                const m = matches[i];
+
+                // Append text up to the end of this H2
+                builtContent += processedContent.substring(lastCursor, m.index + m.length);
+                lastCursor = m.index + m.length;
+
+                // Check frequency
+                if (headingCount % effectiveYoutubeFreq === 0) {
+                    // Search for video using heading text
+                    const query = `${m.text} ${topic}`; // Combine heading and topic for context
+                    try {
+                        const videos = await searchYoutubeVideos(query, 1);
+                        if (videos.length > 0) {
+                            const videoId = videos[0].id;
+                            const embedHtml = `
+                                <div class="youtube-embed">
+                                    <iframe width="560" height="315" src="https://www.youtube.com/embed/${videoId}" 
+                                    title="${videos[0].title}" frameborder="0" 
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                    allowfullscreen></iframe>
+                                </div>`;
+                            builtContent += embedHtml;
+                        }
+                    } catch (e) {
+                        console.error('YouTube Search Error:', e.message);
+                    }
+                }
+            }
+            // Append remaining content
+            builtContent += processedContent.substring(lastCursor);
+            processedContent = builtContent;
+        }
+    }
+
+    // Merge Auto Tags with Custom Tags
+    let finalTags = [];
+    if (autoTags) {
+        finalTags = [...(contentObj.tags || [])];
+    }
+    if (customTags) {
+        const customTagArray = customTags.split(',').map(t => t.trim());
+        finalTags = [...new Set([...finalTags, ...customTagArray])];
+    }
+
+    return {
+        title: contentObj.title,
+        content: processedContent,
+        tags: finalTags,
+        featuredImageUrl: featuredImageUrl, // Return this!
+        raw_tags: contentObj.tags
+    };
+}
+
+const jobs = {};
+
+// Real-time streaming endpoint using Server-Sent Events
+app.post('/api/generate-article/stream', async (req, res) => {
+    try {
+        if (!config.openai.apiKey) {
+            return res.status(400).json({ success: false, message: 'OpenAI API key not configured' });
+        }
+
+        const { topic, keywords, tone, length, customPrompt } = req.body;
+
+        console.log(`Starting article stream for: ${topic}`);
+
+        // Set up SSE headers
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        // Send confirmation that we are starting
+        res.write(`data: ${JSON.stringify({ type: 'start', message: 'Connecting to AI...' })}\n\n`);
+        console.log('Sent start event for topic:', topic);
+
+        const effectivePrompt = customPrompt || config.content.customPrompt || '';
+        const effectiveLength = length || config.content.articleLength || '1000-1500';
+
+        // --- IMAGE GENERATION ---
+        const shouldGenerateImage = config.imageGeneration && config.imageGeneration.featuredEnabled;
+        if (shouldGenerateImage) {
+            console.log('Starting background image generation...');
+            // Check provider: if non-stock (AI), use strictly 1792x1024 or config size.
+            // If stock, use landscape.
+            generateImageForStream(topic, config).then(imageUrl => {
+                if (imageUrl) {
+                    res.write(`data: ${JSON.stringify({ type: 'featured-image', url: imageUrl, alt: topic })}\n\n`);
+                }
+            }).catch(err => console.error('Image gen failed:', err));
+        }
+
+        console.log('Making OpenAI API call for topic:', topic);
+        const response = await axios({
+            method: 'post',
+            url: 'https://api.openai.com/v1/chat/completions',
+            headers: {
+                'Authorization': `Bearer ${config.openai.apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            data: {
+                model: config.openai.contentModel || 'gpt-4o',
+                messages: [
+                    {
+                        role: 'system', content: `You are a professional content writer. Write a ${effectiveLength} words blog post about "${topic}".
+                    Instructions:
+                    1. Write the article content in HTML format (use <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>).
+                    2. Do NOT use <html>, <head>, or <body> tags. Just the content.
+                    3. Start with an <h1> Title.
+                    4. Ensure high readability and good formatting.
+                    5. LINKS: Include 4-5 Reference/Outbound links (e.g. Wikipedia, high-authority sites).
+                       - Anchor text MUST be descriptive (e.g. "latest tech trends") and natural.
+                       - DO NOT use generic names like "Link 1", "Reference", "Source", "Click Here".
+                    6. MANDATORY: Include a "Read Also" section.
+                    7. CRITICAL - IMAGE PLACEMENT RULES:
+                       - Insert Image 1 after the FIRST Heading (H2).
+                       - Insert Image 2 after the 3rd Heading (H2).
+                       - Insert Image 3 after the 5th Heading (H2) (if applicable).
+                       - Insert the YouTube video embed at the very end of the article (before conclusion).
+                       - Ensure images are placed after paragraphs for better flow.
+                    8. CONTEXT: Images must be visually described based on the PRECEDING Heading context.
+                    9. FORMAT: [Heading] -> [Paragraphs] -> [IMAGE: visual description] -> [Next Heading].
+                    10. TAG FORMAT: [IMAGE: description] and [YOUTUBE: search_term].
+                    ` },
+                    {
+                        role: 'user', content: `Topic: ${topic}\nKeywords: ${keywords || 'None'}\nInstructions: ${effectivePrompt}\nOutput HTML with placeholders.`
+                    }
+                ],
+                stream: true
+            },
+            responseType: 'stream'
+        });
+
+        console.log('OpenAI API responded, status:', response.status);
+        console.log('Response headers:', response.headers);
+        console.log('OpenAI stream established, waiting for data...');
+
+        // Buffer for handling split SSE lines
+        let sseBuffer = "";
+        let streamBuffer = ""; // Buffer to handle split tags within content
+
+        response.data.on('data', async chunk => {
+            sseBuffer += chunk.toString();
+
+            // Only process complete lines
+            if (sseBuffer.includes('\n')) {
+                const lines = sseBuffer.split('\n');
+                sseBuffer = lines.pop(); // Keep the last partial line (if any) in the buffer
+
+                for (const line of lines) {
+                    if (line.trim() === '') continue;
+
+                    if (line === 'data: [DONE]') {
+                        console.log('Received [DONE] signal');
+                        res.write(`data: ${JSON.stringify({ type: 'complete', message: 'Generation complete!' })}\n\n`);
+                        res.end();
+                        return;
+                    }
+                    if (line.startsWith('data: ')) {
+                        const jsonStr = line.replace('data: ', '');
+                        try {
+                            const parsed = JSON.parse(jsonStr);
+                            const content = parsed.choices[0]?.delta?.content || '';
+
+                            // Debug log for raw content to see tags
+                            if (content.includes('[')) console.log('Raw content with bracket:', content);
+
+                            if (content) {
+                                streamBuffer += content;
+
+                                // Process Buffer for Tags
+                                // Regex to find complete tags [TAG: content], case insensitive
+                                const imgRegex = /\[IMAGE:\s*(.*?)\]/gi;
+                                const ytRegex = /\[YOUTUBE:\s*(.*?)\]/gi;
+
+                                let match;
+                                let newBuffer = streamBuffer;
+
+                                // Find and Process Images
+                                while ((match = imgRegex.exec(streamBuffer)) !== null) {
+                                    const fullTag = match[0];
+                                    const keyword = match[1];
+                                    console.log('Found inline image tag (creating placeholder):', keyword);
+
+                                    // Create a placeholder instead of fetching immediately
+                                    const placeholderHtml = `<div class="image-placeholder" data-keyword="${keyword}" style="margin: 20px 0; padding: 40px; background: #f3f4f6; border: 2px dashed #d1d5db; border-radius: 8px; text-align: center; color: #6b7280;">
+                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                    <span class="ms-2">Pending Image: <strong>${keyword}</strong></span>
+                                </div>`;
+
+                                    // Inject placeholder into stream
+                                    newBuffer = newBuffer.replace(fullTag, placeholderHtml);
+                                }
+
+                                // Find and Process YouTube
+                                while ((match = ytRegex.exec(streamBuffer)) !== null) {
+                                    const fullTag = match[0];
+                                    const keyword = match[1];
+                                    console.log('Found YouTube tag:', keyword);
+
+                                    if (config.youtube?.apiKey) {
+                                        fetchYouTubeVideo(keyword, config).then(embedUrl => {
+                                            if (embedUrl) {
+                                                res.write(`data: ${JSON.stringify({ type: 'youtube', url: embedUrl, title: keyword })}\n\n`);
+                                            }
+                                        });
+                                    }
+                                    newBuffer = newBuffer.replace(fullTag, '');
+                                }
+
+                                // Send processed content to client
+                                // Only send if we are sure we aren't breaking a tag in progress
+                                // Simple heuristic: if buffer ends with open bracket [, wait.
+                                // But for now, let's just send everything that isn't part of a matched tag?
+                                // Issue: complex logic. 
+                                // Easier: Send the "newBuffer" BUT we must be careful about partial tags at the end.
+                                // If newBuffer ends with "[", "[I", "[IMAGE", etc., we should keep that tail in the buffer and not send it.
+
+                                // Better partial tag detection:
+                                // Check if there is an opening '[' that doesn't have a closing ']' after it
+                                const lastOpen = newBuffer.lastIndexOf('[');
+                                const lastClose = newBuffer.lastIndexOf(']');
+
+                                if (lastOpen !== -1 && lastOpen > lastClose) {
+                                    // We have an open tag that isn't closed yet
+                                    const safeContent = newBuffer.substring(0, lastOpen);
+                                    const keptPart = newBuffer.substring(lastOpen);
+
+                                    if (safeContent) {
+                                        res.write(`data: ${JSON.stringify({ type: 'chunk', content: safeContent })}\n\n`);
+                                    }
+                                    streamBuffer = keptPart; // Keep the incomplete tag
+                                } else {
+                                    // No unbalanced brackets, safe to send all
+                                    if (newBuffer) {
+                                        res.write(`data: ${JSON.stringify({ type: 'chunk', content: newBuffer })}\n\n`);
+                                    }
+                                    streamBuffer = ""; // Clear buffer
+                                }
+                            }
+
+                        } catch (e) {
+                            // ignore parse errors
+                        }
+                    }
+                }
+            }
+        });
+
+        response.data.on('error', err => {
+            console.error('Stream error:', err);
+            res.write(`data: ${JSON.stringify({ type: 'error', message: 'Stream error: ' + err.message })}\n\n`);
+            res.end();
+        });
+
+        response.data.on('end', () => {
+            console.log('Stream ended for topic:', topic);
+            res.write(`data: ${JSON.stringify({ type: 'complete', message: 'Article generation complete!' })}\n\n`);
+            res.end();
+        });
+
+    } catch (error) {
+        console.error('Generation failed:', error.message);
+        console.error('Error details:', {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data
+        });
+
+        if (error.response?.status === 401) {
+            res.write(`data: ${JSON.stringify({ type: 'error', message: 'Authentication Error: Invalid OpenAI API Key. Please check your settings in config.json.' })}\n\n`);
+        } else if (error.response?.status === 429) {
+            res.write(`data: ${JSON.stringify({ type: 'error', message: 'Rate Limit Error: Too many requests. Please try again later.' })}\n\n`);
+        } else {
+            const errorMsg = error.response?.data?.error?.message || error.message;
+            res.write(`data: ${JSON.stringify({ type: 'error', message: 'Error: ' + errorMsg })}\n\n`);
+        }
+        res.end();
+    }
+});
+app.post('/api/generate-article/start', requireAuth, async (req, res) => {
+    try {
+        if (!config.openai.apiKey) {
+            return res.status(400).json({ success: false, message: 'OpenAI API key not configured' });
+        }
+
+        const jobId = Math.random().toString(36).substring(7);
+        jobs[jobId] = { status: 'processing', startTime: Date.now() };
+
+        // Start processing in background (DO NOT AWAIT)
+        generateArticleLogic(req.body)
+            .then(result => {
+                jobs[jobId].status = 'completed';
+                jobs[jobId].result = result;
+            })
+            .catch(error => {
+                console.error("Async Job Error:", error);
+                jobs[jobId].status = 'error';
+                jobs[jobId].error = error.message;
+            });
+
+        res.json({ success: true, jobId: jobId });
+    } catch (error) {
+        console.error("Start Job Error:", error);
+        res.status(500).json({ success: false, message: 'Failed to start job: ' + error.message });
+    }
+});
+
+app.get('/api/generate-article/status/:jobId', requireAuth, (req, res) => {
+    const { jobId } = req.params;
+    const job = jobs[jobId];
+
+    if (!job) {
+        return res.status(404).json({ success: false, message: 'Job not found' });
+    }
+
+    if (job.status === 'completed') {
+        res.json({ success: true, status: 'completed', article: job.result });
+        // Cleanup job after retrieval (optional, or rely on periodic cleanup)
+        delete jobs[jobId];
+    } else if (job.status === 'error') {
+        res.json({ success: false, status: 'error', message: job.error });
+        delete jobs[jobId];
+    } else {
+        res.json({ success: true, status: 'processing' });
+    }
+});
+
+// Periodic cleanup of stale jobs (older than 1 hour)
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, job] of Object.entries(jobs)) {
+        if (now - job.startTime > 3600000) {
+            delete jobs[id];
+        }
+    }
+}, 600000);
+
+app.post('/api/publish-article', requireAuth, async (req, res) => {
+    try {
+        const { title, content, status, categories, tags } = req.body;
+
+        console.log('📝 Publish Request Received:', {
+            title,
+            status,
+            categoriesCount: categories?.length,
+            tagsCount: tags?.length
+        });
+
+        if (!config.wordpress.siteUrl || !config.wordpress.username || !config.wordpress.appPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'WordPress credentials not configured'
+            });
+        }
+
+        const auth = Buffer.from(
+            `${config.wordpress.username}:${config.wordpress.appPassword}`
+        ).toString('base64');
+
+        const postData = {
+            title,
+            content,
+            status: status || 'draft',
+            categories: categories || [],
+            tags: tags || []
+        };
+
+        const response = await axios.post(
+            `${config.wordpress.siteUrl}/wp-json/wp/v2/posts`,
+            postData,
+            {
+                headers: {
+                    'Authorization': `Basic ${auth}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        // Store article in memory
+        articles.unshift({
+            id: response.data.id,
+            title: response.data.title.rendered,
+            status: response.data.status,
+            link: response.data.link,
+            date: new Date()
+        });
+
+        res.json({
+            success: true,
+            message: 'Article published successfully',
+            post: response.data
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to publish article: ' + error.message
+        });
+    }
+});
+
+app.get('/api/articles', requireAuth, (req, res) => {
+    res.json({ success: true, articles });
+});
+
+// Image Generation Endpoints
+app.post('/api/generate-image', requireAuth, async (req, res) => {
+    try {
+        const { prompt, size, quality, style, model } = req.body;
+
+        if (!config.openai.apiKey) {
+            return res.status(400).json({
+                success: false,
+                message: 'OpenAI API key not configured'
+            });
+        }
+
+        let imageModel = model || config.openai.imageModel || 'dall-e-3';
+
+        // Map GPT Image models to actual DALL-E models
+        if (imageModel.includes('gpt-image') || imageModel === 'chatgpt-image-latest') {
+            imageModel = 'dall-e-3';
+        }
+
+        let requestedSize = size || config.imageGeneration.size || '1200x628';
+        const imageQuality = quality || config.imageGeneration.quality || 'hd';
+        const imageStyle = style || config.imageGeneration.style || 'vivid';
+
+        // Map WordPress sizes to OpenAI supported sizes
+        // OpenAI supports: 1024x1024, 1792x1024, 1024x1792
+        const sizeMapping = {
+            '1200x628': '1792x1024',  // WordPress featured -> closest OpenAI landscape
+            '1200x900': '1792x1024',  // 4:3 ratio -> landscape
+            '1024x1024': '1024x1024', // Square (direct match)
+            '1792x1024': '1792x1024', // Landscape (direct match)
+            '1024x1792': '1024x1792'  // Portrait (direct match)
+        };
+
+        const openaiSize = sizeMapping[requestedSize] || '1792x1024';
+
+        const imageConfig = {
+            model: imageModel,
+            prompt: prompt,
+            n: 1,
+            size: openaiSize
+        };
+
+        // Only dall-e-3 supports quality and style
+        if (imageModel === 'dall-e-3') {
+            imageConfig.quality = imageQuality;
+            imageConfig.style = imageStyle;
+        }
+
+        // Use the Images API endpoint
+        const response = await axios.post('https://api.openai.com/v1/images/generations', imageConfig, {
+            headers: {
+                'Authorization': `Bearer ${config.openai.apiKey}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const imageUrl = response.data.data[0].url;
+
+        res.json({
+            success: true,
+            imageUrl: imageUrl,
+            model: imageModel,
+            prompt: prompt,
+            requestedSize: requestedSize,
+            generatedSize: openaiSize,
+            note: requestedSize !== openaiSize ? `Generated at ${openaiSize}, can be resized to ${requestedSize} after download` : null
+        });
+    } catch (error) {
+        console.error('Image Generation Error:', error.message);
+        if (error.response) {
+            console.error('API Error Response:', error.response.data);
+        }
+        res.status(500).json({
+            success: false,
+            message: 'Failed to generate image: ' + error.message
+        });
+    }
+});
+
+// Standalone Media Fetch Endpoint (for Post-Processing)
+app.post('/api/fetch-media', requireAuth, async (req, res) => {
+    try {
+        const { keyword, provider } = req.body;
+        // Use the same config as the active session/global usually, 
+        // but here we just need keys. config is global in this file.
+
+        // Call the internal helper
+        const url = await fetchMediaForStream(provider, keyword, config);
+
+        res.json({
+            success: true,
+            url: url
+        });
+
+    } catch (error) {
+        console.error('Fetch Media API Error:', error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Detect available OpenAI models
+app.get('/api/detect-models', requireAuth, async (req, res) => {
+    try {
+        if (!config.openai.apiKey) {
+            return res.status(400).json({
+                success: false,
+                message: 'OpenAI API key not configured'
+            });
+        }
+
+        const response = await axios.get('https://api.openai.com/v1/models', {
+            headers: {
+                'Authorization': `Bearer ${config.openai.apiKey}`
+            }
+        });
+
+        const allModels = response.data.data;
+
+        // Filter content generation models
+        const contentModels = allModels.filter(m =>
+            m.id.includes('gpt') && !m.id.includes('image') && !m.id.includes('vision')
+        ).map(m => ({
+            id: m.id,
+            name: m.id,
+            type: 'content'
+        }));
+
+        // Define image generation models (based on OpenAI documentation)
+        const imageModels = [
+            { id: 'gpt-image-1.5', name: 'GPT-Image-1.5 (Latest & Best)', type: 'image', description: 'State-of-the-art image generation with best quality and performance' },
+            { id: 'gpt-image-1', name: 'GPT-Image-1 (High Fidelity)', type: 'image', description: 'High-fidelity visuals with strong instruction-following' },
+            { id: 'gpt-image-1-mini', name: 'GPT-Image-1-Mini (Cost-Efficient)', type: 'image', description: 'Faster and more cost-efficient for high-volume workflows' },
+            { id: 'chatgpt-image-latest', name: 'ChatGPT Image Latest (Alias)', type: 'image', description: 'Points to current ChatGPT image model (gpt-image-1.5)' },
+            { id: 'dall-e-3', name: 'DALL-E 3 (Deprecated)', type: 'image', description: 'Legacy model - migrate to GPT Image models' },
+            { id: 'dall-e-2', name: 'DALL-E 2 (Deprecated)', type: 'image', description: 'Legacy model - migrate to GPT Image models' }
+        ];
+
+        res.json({
+            success: true,
+            contentModels: contentModels,
+            imageModels: imageModels
+        });
+    } catch (error) {
+        // Return default models if API call fails
+        res.json({
+            success: true,
+            contentModels: [
+                { id: 'gpt-4o', name: 'GPT-4o', type: 'content' },
+                { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', type: 'content' },
+                { id: 'gpt-4', name: 'GPT-4', type: 'content' },
+                { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', type: 'content' }
+            ],
+            imageModels: [
+                { id: 'gpt-image-1.5', name: 'GPT-Image-1.5 (Latest & Best)', type: 'image', description: 'State-of-the-art image generation' },
+                { id: 'gpt-image-1', name: 'GPT-Image-1 (High Fidelity)', type: 'image', description: 'High-fidelity visuals' },
+                { id: 'gpt-image-1-mini', name: 'GPT-Image-1-Mini (Cost-Efficient)', type: 'image', description: 'Cost-efficient option' },
+                { id: 'chatgpt-image-latest', name: 'ChatGPT Image Latest', type: 'image', description: 'Latest ChatGPT image model' },
+                { id: 'dall-e-3', name: 'DALL-E 3 (Deprecated)', type: 'image', description: 'Legacy model' },
+                { id: 'dall-e-2', name: 'DALL-E 2 (Deprecated)', type: 'image', description: 'Legacy model' }
+            ]
+        });
+    }
+});
+
+// Upload image to WordPress
+app.post('/api/upload-image-to-wordpress', requireAuth, async (req, res) => {
+    try {
+        const { imageUrl, title } = req.body;
+
+        if (!config.wordpress.siteUrl || !config.wordpress.username || !config.wordpress.appPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'WordPress credentials not configured'
+            });
+        }
+
+        // Download image from URL
+        const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+        const imageBuffer = Buffer.from(imageResponse.data, 'binary');
+
+        const auth = Buffer.from(
+            `${config.wordpress.username}:${config.wordpress.appPassword}`
+        ).toString('base64');
+
+        // Upload to WordPress media library
+        const uploadResponse = await axios.post(
+            `${config.wordpress.siteUrl}/wp-json/wp/v2/media`,
+            imageBuffer,
+            {
+                headers: {
+                    'Authorization': `Basic ${auth}`,
+                    'Content-Type': 'image/png',
+                    'Content-Disposition': `attachment; filename="${title || 'generated-image'}.png"`
+                }
+            }
+        );
+
+        res.json({
+            success: true,
+            mediaId: uploadResponse.data.id,
+            mediaUrl: uploadResponse.data.source_url
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to upload image: ' + error.message
+        });
+    }
+});
+
+app.post('/api/automation/toggle', requireAuth, (req, res) => {
+    config.automation.enabled = !config.automation.enabled;
+    manageScheduler(); // Update scheduler status
+    res.json({
+        success: true,
+        enabled: config.automation.enabled
+    });
+});
+
+app.post('/api/automation/settings', requireAuth, (req, res) => {
+    const { schedule, minutesInterval, cronExpression, autoCreateCategories, autoCreateTags, dailyArticleLimit } = req.body;
+
+    if (schedule) config.automation.schedule = schedule;
+    if (minutesInterval !== undefined) config.automation.minutesInterval = parseInt(minutesInterval) || 5;
+    if (cronExpression) config.automation.cronExpression = cronExpression;
+    if (autoCreateCategories !== undefined) config.automation.autoCreateCategories = autoCreateCategories;
+    if (autoCreateTags !== undefined) config.automation.autoCreateTags = autoCreateTags;
+    if (dailyArticleLimit !== undefined) config.automation.dailyArticleLimit = parseInt(dailyArticleLimit) || 5;
+
+    saveConfig(); // Persist changes
+
+    manageScheduler(); // reliable restart with new settings
+
+    res.json({ success: true, message: 'Automation settings updated' });
+});
+
+// Initialize scheduler on startup
+manageScheduler();
+
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok' });
+});
+
+const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`WordPress Automation Server running on port ${PORT}`);
+});
+
+// INCREASE TIMEOUT TO 20 MINUTES (1200000 ms)
+server.setTimeout(1200000);
+
+// Helper for streaming image generation
+async function generateImageForStream(topic, config) {
+    try {
+        // Check if featured image is enabled
+        if (!config.imageGeneration?.featuredEnabled) {
+            console.log('Featured image generation is disabled in settings.');
+            return null;
+        }
+
+        const provider = config.imageGeneration.provider || 'dall-e-3';
+        console.log(`Generating featured image for: ${topic} using provider: ${provider}`);
+
+        if (provider === 'pexels' || provider === 'unsplash' || provider === 'pixabay') {
+            return await fetchMediaForStream(provider, topic, config);
+        }
+
+        // Default to OpenAI (DALL-E)
+        if (!config.openai.apiKey) return null;
+
+        const size = config.imageGeneration.size || "1024x1024";
+        const quality = config.imageGeneration.quality || "standard";
+        const style = config.imageGeneration.style || "vivid";
+
+        // Map WordPress size to text for prompt if needed, but OpenAI takes specific sizes.
+        // We'll use the mapping logic from the /api/generate-image endpoint if possible, 
+        // or just stick to 1024x1024/landscape for safety unless specific DALL-E 3 support is added here.
+        // To be safe and consistent with previous code:
+        const prompt = `A professional blog featured image for an article about: ${topic}. Style: ${style}. High quality.`;
+
+        const response = await axios.post('https://api.openai.com/v1/images/generations', {
+            model: "dall-e-3",
+            prompt: prompt,
+            n: 1,
+            size: "1792x1024",
+            quality: quality,
+            style: style
+        }, {
+            headers: {
+                'Authorization': `Bearer ${config.openai.apiKey}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (response.data?.data?.length > 0) {
+            return response.data.data[0].url;
+        }
+
+    } catch (error) {
+    }
+    return null;
+}
+
+// Unified Media Fetcher (Stock or AI)
+// Unified Media Fetcher (Stock or AI)
+async function fetchMediaForStream(provider, query, config) {
+    console.log(`Fetching media via ${provider} for: ${query}`);
+
+    // Normalize Provider Strings
+    const isAI = ['dalle', 'dall-e-3', 'dall-e-2', 'openai', 'gpt-image-1.5', 'gpt-image-1', 'chatgpt-image-latest'].includes(provider?.toLowerCase());
+
+    // 1. Try Configured Provider
+    let imageUrl = null;
+
+    try {
+        if (isAI) {
+            imageUrl = await generateAiImage(query, config);
+        } else if (provider === 'pexels') {
+            const apiKey = config.stockImages.pexelsApiKey;
+            if (apiKey) {
+                const res = await axios.get(`https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape&size=large`, { headers: { 'Authorization': apiKey } });
+                imageUrl = res.data?.photos?.[0]?.src?.large2x || res.data?.photos?.[0]?.src?.original;
+            }
+        } else if (provider === 'unsplash') {
+            const apiKey = config.stockImages.unsplashApiKey;
+            if (apiKey) {
+                const res = await axios.get(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`, { headers: { 'Authorization': `Client-ID ${apiKey}` } });
+                imageUrl = res.data?.results?.[0]?.urls?.regular;
+            }
+        } else if (provider === 'pixabay') {
+            const apiKey = config.stockImages.pixabayApiKey;
+            if (apiKey) {
+                const res = await axios.get(`https://pixabay.com/api/?key=${apiKey}&q=${encodeURIComponent(query)}&image_type=photo&orientation=horizontal&per_page=3`);
+                imageUrl = res.data?.hits?.[0]?.largeImageURL;
+            }
+        }
+    } catch (err) {
+        console.error(`Provider ${provider} failed:`, err.message);
+    }
+
+    // 2. Fallback to OpenAI if Stock/Primary failed and OpenAI Key exists
+    if (!imageUrl && config.openai.apiKey) {
+        console.log(`Primary provider ${provider} failed or returned no image. Falling back to DALL-E 3.`);
+        imageUrl = await generateAiImage(query, config);
+    }
+
+    return imageUrl;
+}
+
+// Separate AI Gen Helper to be called by fetchMediaForStream
+async function generateAiImage(query, config) {
+    try {
+        const prompt = `A high-quality, natural style blog image about: ${query}. 1792x1024 landscape resolution style.`;
+        const response = await axios.post('https://api.openai.com/v1/images/generations', {
+            model: "dall-e-3",
+            prompt: prompt,
+            n: 1,
+            size: "1792x1024",
+            quality: "standard",
+            style: "natural"
+        }, {
+            headers: { 'Authorization': `Bearer ${config.openai.apiKey}` }
+        });
+        return response.data?.data?.[0]?.url;
+    } catch (e) {
+        console.error('AI Gen Error:', e.message);
+        return null;
+    }
+}
+
+// Helper for YouTube
+async function fetchYouTubeVideo(query, config) {
+    try {
+        const apiKey = config.youtube.apiKey;
+        if (!apiKey) return null;
+
+        const res = await axios.get(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&key=${apiKey}&type=video&maxResults=1`);
+
+        if (res.data.items && res.data.items.length > 0) {
+            const videoId = res.data.items[0].id.videoId;
+            return `https://www.youtube.com/embed/${videoId}`;
+        }
+    } catch (err) {
+        console.error("YouTube search error:", err.message);
+    }
+    return null;
+}
+
+// Publish Article Endpoint
+app.post('/api/publish-article', async (req, res) => {
+    const { title, content, status, featuredImageUrl } = req.body;
+
+    try {
+        if (!config.wordpress.siteUrl || !config.wordpress.username || !config.wordpress.appPassword) {
+            return res.status(400).json({ success: false, message: 'WordPress credentials not configured' });
+        }
+
+        const wpUrl = config.wordpress.siteUrl.replace(/\/$/, '');
+        const auth = Buffer.from(`${config.wordpress.username}:${config.wordpress.appPassword}`).toString('base64');
+
+        let featuredMediaId = null;
+
+        // Upload Featured Image if provided
+        if (featuredImageUrl) {
+            try {
+                console.log('Uploading featured image:', featuredImageUrl);
+                const imageResponse = await axios.get(featuredImageUrl, { responseType: 'arraybuffer' });
+                const imageBuffer = Buffer.from(imageResponse.data, 'binary');
+                const filename = `featured-image-${Date.now()}.jpg`;
+
+                const mediaResponse = await axios.post(`${wpUrl}/wp-json/wp/v2/media`, imageBuffer, {
+                    headers: {
+                        'Authorization': `Basic ${auth}`,
+                        'Content-Type': 'image/jpeg',
+                        'Content-Disposition': `attachment; filename="${filename}"`
+                    }
+                });
+                featuredMediaId = mediaResponse.data.id;
+                console.log('Featured image uploaded, ID:', featuredMediaId);
+            } catch (imgError) {
+                console.error('Failed to upload featured image:', imgError.message);
+                // Continue without featured image
+            }
+        }
+
+        const postData = {
+            title: title || 'AI Generated Article',
+            content: content,
+            status: status || 'draft',
+            featured_media: featuredMediaId
+        };
+
+        const response = await axios.post(`${wpUrl}/wp-json/wp/v2/posts`, postData, {
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        res.json({ success: true, message: 'Published successfully', link: response.data.link });
+    } catch (error) {
+        console.error('Publish error:', error.message);
+        res.status(500).json({ success: false, message: 'Failed to publish: ' + error.message });
+    }
+});

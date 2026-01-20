@@ -1,0 +1,25 @@
+# App-Only Docker Compose
+# Use this when your existing web server handles SSL and reverse proxy
+
+version: '3.8'
+
+services:
+  # WordPress Automation Web App
+  wp-automation-app:
+    build: ./app
+    container_name: wp_automation_app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"  # Only bind to localhost for security
+    environment:
+      - NODE_ENV=production
+      - SESSION_SECRET=change_this_to_random_secret_key
+    volumes:
+      - ./app:/usr/src/app
+      - /usr/src/app/node_modules
+    networks:
+      - wp-network
+
+networks:
+  wp-network:
+    driver: bridge

@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # WordPress Automation Web App
+  wp-automation-app:
+    build: ./app
+    container_name: wp_automation_app
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - SESSION_SECRET=${SESSION_SECRET:-change_this_to_random_secret_key_minimum_32_characters}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change_this_password}
+    volumes:
+      - ./app:/usr/src/app
+      - /usr/src/app/node_modules
+    networks:
+      - n8n-setup_default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wp-automation.rule=Host(`wp.vjgp.online`)"
+      - "traefik.http.routers.wp-automation.entrypoints=websecure"
+      - "traefik.http.routers.wp-automation.tls=true"
+      - "traefik.http.routers.wp-automation.tls.certresolver=myresolver"
+      - "traefik.http.services.wp-automation.loadbalancer.server.port=3000"
+      # Timeout Middleware
+      - "traefik.http.middlewares.timeout-middleware.circuitbreaker.expression=ResponseCodeRatio(500, 600, 0, 600) > 0.25"
+      - "traefik.http.middlewares.my-retry.retry.attempts=3"
+      # Increase timeout to 5 minutes (300s) for long generation tasks
+      - "traefik.http.middlewares.timeout-middleware.buffering.maxRequestBodyBytes=10485760"
+      - "traefik.http.middlewares.timeout-middleware.buffering.memRequestBodyBytes=2097152"
+      - "traefik.http.middlewares.timeout-middleware.buffering.maxResponseBodyBytes=10485760"
+      - "traefik.http.middlewares.timeout-middleware.buffering.memResponseBodyBytes=2097152"
+      - "traefik.http.middlewares.timeout-middleware.buffering.retryExpression=IsNetworkError() && Attempts() <= 2"
+      # Note: Traefik generic timeouts are often set on entrypoints in static config.
+      # But we can try to use middlewares if plugins are unavailable.
+      # Standard Traefik doesn't have a simple 'timeout' middleware for response duration per-route easily without custom config.
+      # However, usually the issue is the client disconnects or the gateway times out.
+      # Let's double check if we can set transport settings via labels? No, that's for backend connection.
+      
+      # Correct approach for Traefik v2/v3 is confusing via labels for timeouts.
+      # Usually requires File provider for Transport configuration.
+      # But we can try setting the 'transport' label if defined in dynamic config, or just ensure the backend doesn't timeout.
+      
+      # Actually, the user error 'Failed to fetch' often comes from the BROWSER (client) timeout if it's exactly 60s/30s.
+      # OR checking if Traefik has a default timeout.
+      
+      # Let's assume the issue might also be the browser or just the connection dropping.
+      # But let's add this label just in case the environment supports it (some setups do):
+      # - "traefik.http.routers.wp-automation.middlewares=timeout-middleware"
+      
+      # Wait, easier fix: The backend IS responding, but maybe taking too long?
+      # If Traefik kills it, it returns 502/504.
+      # 'Failed to fetch' in JS fetch() often means network error or CORS or abort.
+      # If it happens at exactly 60s, it's a timeout.
+      
+      # Let's try to optimize the server-side to send "heartbeats" or use Server-Sent Events (SSE).
+      # But first, let's try to increase timeouts via labels if possible.
+      # It seems Traefik labels for readTimeout are not standard.
+      
+      # Alternative: We modify the server to return a job ID immediately, and the client polls for status.
+      # This is the ROBUST way to handle long tasks.
+      # Given we are "fixing" existing code, maybe polling is the best architectural fix.
+
+
+networks:
+  n8n-setup_default:
+    external: true

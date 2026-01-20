@@ -1,0 +1,138 @@
+/* Tab Navigation System - Folder Style */
+
+/* Container context */
+.settings-container {
+    max-width: 1400px;
+    /* Keep existing width */
+}
+
+/* 1. tabs container (The list of buttons) */
+.tabs-nav {
+    display: flex;
+    border-bottom: 1px solid #475569;
+    /* Explicit clear border color matching dark theme */
+    margin-bottom: 0;
+    /* Important: No gap between tabs and content */
+    padding-left: 0;
+}
+
+/* 2. tab buttons */
+.tab-btn {
+    padding: 12px 24px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    background: rgba(30, 41, 59, 0.5);
+    /* Inactive tab bg (darker) */
+    cursor: pointer;
+    margin-right: 4px;
+    /* Space between tabs */
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    border-radius: 8px 8px 0 0;
+    /* Rounded tops */
+    transition: all 0.2s;
+    position: relative;
+    top: 1px;
+    /* Push down to sit exactly on the line */
+}
+
+.tab-btn:hover {
+    background: rgba(51, 65, 85, 0.5);
+    color: var(--text-primary);
+}
+
+/* 3. active tab button */
+.tab-btn.active {
+    background: #1e293b;
+    /* Matches tab-content bg (var(--bg-secondary)) */
+    border: 1px solid #475569;
+    /* Match container border */
+    border-bottom: 1px solid #1e293b;
+    /* Same color as bg to "erase" the line */
+    color: var(--primary-color);
+    font-weight: 600;
+    z-index: 2;
+    /* Sit above the container border */
+}
+
+/* 4. tab content area */
+.tab-content {
+    display: none;
+    /* Hidden by default */
+    padding: 2rem;
+    border: 1px solid #475569;
+    /* Match border color */
+    border-top: none;
+    /* The nav handles the top border visual */
+    background: #1e293b;
+    /* var(--bg-secondary) */
+    border-radius: 0 0 8px 8px;
+    /* Bottom corners rounded */
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+.tab-content.active {
+    display: block;
+    /* Show when active */
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* 5. Reset internal Card styles to avoid "box in a box" */
+.tab-content .card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.tab-content .card-header {
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1.5rem;
+}
+
+.tab-content .card-body {
+    padding: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .tabs-nav {
+        flex-direction: column;
+        border-bottom: none;
+    }
+
+    .tab-btn {
+        width: 100%;
+        border: 1px solid var(--border-color);
+        margin-bottom: 0.5rem;
+        border-radius: 8px;
+        text-align: left;
+    }
+
+    .tab-btn.active {
+        border-color: var(--primary-color);
+        border-bottom: 1px solid var(--primary-color);
+    }
+
+    .tab-content {
+        border-top: 1px solid var(--border-color);
+        border-radius: 8px;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
