@@ -14,48 +14,86 @@ const app = express();
 
 const BLOG_RULES = `
 ✅ BLOG LENGTH & PURPOSE
-
 Minimum 900+ words per blog
-
 Written to be educational, viral, and SEO-driven
-
 Focused on inspection deficiencies, safety issues, or common inspection findings
-
 Written for home buyers, homeowners, and agents
-
 Promote Inspection Time naturally (not salesy)
 
 ✅ SEO TITLE (H1) RULES
-
 Focus keyword must be the very first words in the H1
-
 Must include one strong power word (Hidden, Dangerous, Costly, Serious, Critical, etc.)
-
 Should include a number when appropriate
-
 Target 67 characters or less
-
 Negative/emotional language is intentional and preferred
-
 Do not repeat the focus keyword excessively in the title
 
 ✅ FOCUS KEYWORD RULES (STRICT)
-
 Focus keyword must appear:
-
 At the start of the H1
-
 In the first sentence of the blog
-
 In at least one H2 or H3
-
 Target keyword density: ~2.25% (acceptable ~2.2–2.3%)
-
 Avoid keyword stuffing
-
 Use semantic variations and synonyms throughout
-
 Exact-match usage must be tightly controlled
+
+✅ BLOG STRUCTURE
+Clear H2 / H3 headings
+Easy-to-understand explanations
+Inspector-authority tone without alarmism
+Include a “Relevant Standards” section when applicable
+IRC / IMC / IFGC / NEC / manufacturer listings
+Educational only, not enforcement language
+
+✅ LOCAL SEO RULES (MANDATORY)
+Each blog must naturally reference Texas service areas, rotated and non-spammy:
+Central Texas
+North Texas
+Dallas
+Houston
+San Antonio
+Corpus Christi
+Surrounding areas
+
+✅ IMAGES
+Include a featured image
+Include additional images where helpful
+Each image must have:
+Alt text
+Image title
+Caption
+Image description
+
+✅ REQUIRED DELIVERABLES (EVERY BLOG)
+You require ALL of the following every time:
+Blog title
+Blog description (900+ characters)
+Post title
+Meta description
+Focus keyword
+Featured image
+Featured image alt text
+Featured image title
+Featured image caption
+Featured image description
+
+✅ STYLE, TONE & LIABILITY
+Professional and educational
+Not alarmist
+No DIY instructions
+No code-enforcement language
+Written to reduce legal exposure
+Clear inspector expertise without guarantees
+
+✅ FINAL ENFORCEMENT RULES
+SEO tool warnings about negative sentiment = ignore
+One blog at a time unless requested otherwise
+Never forget:
+Keyword placement rules
+Relevant Standards section
+Images + metadata
+Texas service-area mentions
 `;
 const PORT = process.env.PORT || 3000;
 
@@ -268,8 +306,8 @@ async function runSingleAutomationTask() {
             return;
         }
 
-        console.log(`Generating article for topic: ${topic}`);
-        addLog('info', `Automation Task Started: ${topic}`);
+        console.log(`Deep Analysis: Generating comprehensive article for topic: ${topic}`);
+        addLog('info', `Long-Form Automation Started: ${topic} (Estimated duration: 5-8 minutes)`);
 
 
 
@@ -281,7 +319,7 @@ async function runSingleAutomationTask() {
         }
 
         // Log all configuration settings being used
-        addLog('info', 'Automation Configuration', {
+        addLog('info', 'Deep Background Analysis Settings', {
             topic: topic,
             articleLength: config.content.articleLength,
             imageProvider: config.imageGeneration.provider,
@@ -299,7 +337,7 @@ async function runSingleAutomationTask() {
             articleInstructions: config.content.articleInstructions ? 'Yes' : 'No'
         });
 
-        // Generate Article logic - Using ALL configuration settings
+        // Generate ArticleLogic - Using ALL configuration settings
         const articleData = await generateArticleLogic({
             // Topic & Keywords (from Keywords Configuration tab)
             topic: topic,
@@ -307,16 +345,16 @@ async function runSingleAutomationTask() {
             tone: 'professional',
 
             // Article Settings (from Instructions & Prompts tab)
-            length: config.content.articleLength,
+            length: '1500-2000', // Enforce LONG form for scheduled articles
             customPrompt: config.content.customPrompt,
             articleInstructions: config.content.articleInstructions,
 
             // Image Generation Settings (from Image Generation tab)
-            imageProvider: config.imageGeneration.provider, // Use Default (Runware)
-            imageModel: config.openai.imageModel, // Use Default (Nano Banana Pro)
+            imageProvider: config.imageGeneration.provider,
+            imageModel: config.openai.imageModel,
             imageCustomPrompt: config.content.imageCustomPrompt,
             featuredEnabled: true,
-            inlineEnabled: false, // Ensure Disabled
+            inlineEnabled: false, // FORCE DISABLED for scheduled tasks
             inlineFrequency: 0,
             imageSize: config.imageGeneration.size,
             imageQuality: config.imageGeneration.quality,
@@ -1138,7 +1176,7 @@ async function generateArticleLogic(params) {
     // --- Configuration Overrides ---
     // Use params if provided, otherwise fall back to global config
     const effectiveApiKey = apiKey || config.openai.apiKey;
-    const effectiveContentModel = contentModel || config.openai.contentModel || 'gpt-4';
+    const effectiveContentModel = contentModel || config.openai.contentModel || 'gpt-4o';
 
     const effectiveFeatured = featuredEnabled !== undefined ? featuredEnabled : config.imageGeneration.featuredEnabled;
     const effectiveInline = inlineEnabled !== undefined ? inlineEnabled : config.imageGeneration.inlineEnabled;
@@ -1148,17 +1186,18 @@ async function generateArticleLogic(params) {
     const provider = imageProvider || config.imageGeneration.provider || 'dalle';
 
     const effectivePrompt = customPrompt || config.content.customPrompt || '';
-    const effectiveLength = length || config.content.articleLength || '1000-1500';
+    const effectiveLength = length || config.content.articleLength || '1500-2000';
 
     // --- System Prompt Construction ---
-    let systemPrompt = `You are a professional content writer. Write a detailed, HIGH-QUALITY blog post of at least ${effectiveLength} words about "${topic}".
+    let systemPrompt = `You are an expert professional content writer specializing in LONG-TAIL deep-dive articles. Your goal is to write a comprehensive, exhaustive guide of at least ${effectiveLength} words about "${topic}".
     
-    CRITICAL INSTRUCTIONS:
-    1. LENGTH: The article MUST be MINIMUM 1000 words and MAXIMUM 1500 words. This is MANDATORY. Use long, detailed paragraphs with comprehensive explanations.
-    2. FORMAT: Output valid JSON only.
-    3. NO PLACEHOLDERS IN TEXT: Do not leave any [Social Media] or [Meta] sections in the "content" HTML field. 
-    4. IMAGES: You MUST include [IMAGE_PLACEHOLDER: search_term] tags in the content.
-    5. NO INTRODUCTION HEADING: Do NOT use "Introduction" as a heading. Start directly with the hook or first section.
+    CRITICAL INSTRUCTIONS FOR EXTREME LENGTH & QUALITY:
+    1. LENGTH: The article MUST be between 1500 and 2000 words. DO NOT use placeholders like "..." or snippets. Every section must be fully written.
+    2. STRUCTURE: Use at least 10-15 detailed H2 and H3 subsections. Each section must contain 4-6 long, informative paragraphs.
+    3. NO FILLER: DO NOT include navigational fluff like "Discover more", "Read now", "Contact us", or repetitive site names. 
+    4. TEXAS CITIES: Reference Texas service areas (Dallas, Houston, San Antonio, Austin, etc.) NATURALLY within sentences (e.g., "Homeowners in the Austin area often face..."). DO NOT create isolated lists or button-like text for cities.
+    5. PARAGRAPH DEPTH: Each paragraph must be at least 5-7 sentences long. Provide technical details, historical context, and expert evidence.
+    6. NO INTRODUCTION HEADING: Start directly with the text.
     `;
 
     if (effectivePrompt) {
@@ -1176,13 +1215,19 @@ async function generateArticleLogic(params) {
     
     IMPORTANT: Format the response as a strict JSON object with the following keys:
     {
-      "title": "string",
+      "title": "string (H1 title)",
+      "post_title": "string (Optimized post title)",
+      "focus_keyword": "string",
+      "blog_description": "string (Detailed summary, 900+ characters)",
       "content": "string (HTML format tags: <h2>, <h3>, <p>, <ul>, <li>, <strong>. DO NOT include <html>, <head>, <body> tags. DO NOT include social posts here.)",
       "meta_description": "string (Optimized for SEO)",
       "tags": ["array", "of", "strings"],
       "featured_image": {
          "prompt": "string (Detailed prompt for AI generator - detailed, photorealistic, no text)",
-         "alt_text": "string"
+         "alt_text": "string",
+         "title": "string",
+         "caption": "string",
+         "description": "string"
       },
       "social_posts": {
          "facebook": "string",
@@ -1230,15 +1275,14 @@ async function generateArticleLogic(params) {
             { role: 'user', content: systemPrompt }
         ],
         temperature: 0.7,
-        stream: false // This logic function is the underlying generation, streaming is handled by the wrapper if needed, but for now we keep this awaiting full response or simple chunks? 
-        // WAIT: The user wants streaming. This function is called by the streaming endpoint? 
-        // NO, the streaming endpoint handles its OWN call to OpenAI if it wants true streaming.
-        // Let's check the streaming endpoint.
+        max_tokens: 4095, // Maximize output space for long articles
+        stream: false
     }, {
         headers: {
             'Authorization': `Bearer ${effectiveApiKey}`,
             'Content-Type': 'application/json'
-        }
+        },
+        timeout: 600000 // 10 minutes timeout for background generation
     });
 
     // ... Parsing logic remains similar but uses effective params ...
@@ -1577,26 +1621,20 @@ app.post('/api/generate-article/stream', async (req, res) => {
                 model: config.openai.contentModel || 'gpt-4o',
                 messages: [
                     {
-                        role: 'system', content: `You are a professional content writer. Write a ${effectiveLength} words blog post about "${topic}".
+                        role: 'system', content: `You are an expert professional content writer specializing in LONG-TAIL deep-dive articles. Your goal is to write a comprehensive, exhaustive, and EXTREMELY detailed blog post about "${topic}".
                     ${BLOG_RULES}
-                    Instructions:
-                    1. Write the article content in HTML format (use <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>).
-                    2. Do NOT use <html>, <head>, or <body> tags. Just the content.
-                    3. Start with an <h1> Title.
-                    4. Ensure high readability and good formatting.
-                    5. LINKS: Include 4-5 Reference/Outbound links (e.g. Wikipedia, high-authority sites).
-                       - Anchor text MUST be descriptive (e.g. "latest tech trends") and natural.
-                       - DO NOT use generic names like "Link 1", "Reference", "Source", "Click Here".
-                    6. MANDATORY: Include a "Read Also" section.
-                    7. CRITICAL - IMAGE PLACEMENT RULES:
-                       - Insert Image 1 after the FIRST Heading (H2).
-                       - Insert Image 2 after the 3rd Heading (H2).
-                       - Insert Image 3 after the 5th Heading (H2) (if applicable).
-                       - Insert the YouTube video embed at the very end of the article (before conclusion).
-                       - Ensure images are placed after paragraphs for better flow.
-                    8. CONTEXT: Images must be visually described based on the PRECEDING Heading context.
-                    9. FORMAT: [Heading] -> [Paragraphs] -> [IMAGE: visual description] -> [Next Heading].
-                    10. TAG FORMAT: [IMAGE: description] and [YOUTUBE: search_term].
+                    
+                    CRITICAL INSTRUCTIONS FOR EXTREME LENGTH & QUALITY:
+                    1. LENGTH: Minimum 1500 words, targeting 2000. DO NOT use placeholders or snippets.
+                    2. NO FILLER: DO NOT include navigational fluff like "Discover more", "Read now", or repetitive site names.
+                    3. TEXAS CITIES: Reference Texas service areas NATURALLY within sentences. No isolated lists.
+                    4. PARAGRAPH DEPTH: Every section must contain multiple long, informative paragraphs (5-7 sentences each).
+                    5. FORMAT: HTML (<h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>). No <html> or <body> tags.
+                    6. IMAGES/VIDEO:
+                       - Insert Image [IMAGE: visual description] after 1st and 3rd H2.
+                       - Insert Video [YOUTUBE: search_query] randomly after H2/H3.
+                    7. LINKS: Include 4-5 descriptive outbound links.
+                    8. NO INTRODUCTION HEADING: Start directly with the hook.
                     ` },
                     {
                         role: 'user', content: `Topic: ${topic}\nKeywords: ${keywords || 'None'}\nInstructions: ${effectivePrompt}\nOutput HTML with placeholders.`
@@ -2013,7 +2051,8 @@ app.post('/api/test/generate-image', requireAuth, async (req, res) => {
             ];
 
             const rwRes = await axios.post('https://api.runware.ai/v1', runwarePayload, {
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 300000
             });
 
             if (rwRes.data && rwRes.data.data) {
@@ -2406,7 +2445,8 @@ async function generateRunwareImage(query, config, prompt) {
         ];
 
         const response = await axios.post('https://api.runware.ai/v1', runwarePayload, {
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 300000
         });
 
         if (response.data && response.data.data) {
