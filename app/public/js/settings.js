@@ -143,7 +143,9 @@ document.getElementById('apiKeysForm').addEventListener('submit', async (e) => {
         youtubeApiKey: formData.get('youtubeApiKey'),
         unsplashApiKey: formData.get('unsplashApiKey'),
         pexelsApiKey: formData.get('pexelsApiKey'),
-        pixabayApiKey: formData.get('pixabayApiKey')
+        pixabayApiKey: formData.get('pixabayApiKey'),
+        googleApiKey: formData.get('googleApiKey'),
+        googleSearchEngineId: formData.get('googleSearchEngineId')
     };
     await saveSettings(data, 'API Keys');
 });
@@ -239,6 +241,31 @@ document.getElementById('automationEnabled').addEventListener('change', async (e
         e.target.checked = !e.target.checked;
     }
 });
+
+// Trigger Automation Now
+async function triggerAutomationNow() {
+    if (!confirm('Are you sure you want to trigger a single article generation task immediately?')) {
+        return;
+    }
+
+    try {
+        showNotification('🚀 Starting automation task in background...', 'info');
+
+        const response = await fetch('/api/automation/trigger-now', {
+            method: 'POST'
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showNotification(result.message, 'success');
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (error) {
+        showNotification('Error triggering automation: ' + error.message, 'error');
+    }
+}
 
 // AI Models form
 document.getElementById('aiModelsForm').addEventListener('submit', async (e) => {
@@ -524,6 +551,8 @@ async function testPixabay() {
     }
 }
 
+
+
 // Toggle schedule options
 function toggleScheduleOptions() {
     const schedule = document.getElementById('schedule').value;
@@ -537,3 +566,137 @@ function toggleScheduleOptions() {
         cronGroup.style.display = schedule === 'cron' ? 'block' : 'none';
     }
 }
+// Test Image Generation Form
+document.getElementById('testImageForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const resultDiv = document.getElementById('testImageResult');
+    const loadingDiv = document.getElementById('testImageLoading');
+    const previewImg = document.getElementById('testImagePreview');
+    const errorDiv = document.getElementById('testImageError');
+    const submitBtn = document.getElementById('testImageBtn');
+
+    // Reset UI
+    resultDiv.style.display = 'block';
+    loadingDiv.style.display = 'block';
+    previewImg.style.display = 'none';
+    errorDiv.style.display = 'none';
+    submitBtn.disabled = true;
+
+    const formData = new FormData(e.target);
+    const data = {
+        provider: formData.get('provider'),
+        model: formData.get('model'),
+        prompt: formData.get('prompt')
+    };
+
+    try {
+        const response = await fetch('/api/test/generate-image', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            previewImg.src = result.imageUrl;
+            previewImg.style.display = 'block';
+            showNotification('Image generated successfully!', 'success');
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (error) {
+        console.error('Test generation error:', error);
+        errorDiv.textContent = 'Error: ' + error.message;
+        errorDiv.style.display = 'block';
+        showNotification('Failed to generate image', 'error');
+    } finally {
+        loadingDiv.style.display = 'none';
+        submitBtn.disabled = false;
+    }
+});
+// System Logs Logic
+async function fetchSystemLogs() {
+    const container = document.getElementById('logs-container');
+    container.innerHTML = '<p>Loading logs...</p>';
+
+    try {
+        const response = await fetch('/api/system-logs');
+        const logs = await response.json();
+
+        if (logs.length === 0) {
+            container.innerHTML = '<p>No logs available yet.</p>';
+            return;
+        }
+
+        container.innerHTML = logs.map(log => {
+            const time = new Date(log.timestamp).toLocaleTimeString();
+            // Colors based on level
+            const colors = {
+                'info': '#3b82f6',
+                'success': '#10b981',
+                'warning': '#f59e0b',
+                'error': '#ef4444'
+            };
+            const color = colors[log.level] || '#d4d4d4';
+
+            let metaHtml = '';
+            if (log.meta) {
+                try {
+                    const metaObj = JSON.parse(log.meta);
+                    metaHtml = `<pre style="margin: 5px 0 0 20px; font-size: 0.8rem; color: #888;">${JSON.stringify(metaObj, null, 2)}</pre>`;
+                } catch (e) {
+                    metaHtml = `<span style="color: #888;"> | ${log.meta}</span>`;
+                }
+            }
+
+            return `
+                <div style="margin-bottom: 0.5rem; border-bottom: 1px solid #333; padding-bottom: 0.5rem;">
+                    <span style="color: #888;">[${time}]</span>
+                    <strong style="color: ${color}; text-transform: uppercase;">[${log.level}]</strong>
+                    <span style="color: #e5e5e5;">${log.message}</span>
+                    ${metaHtml}
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        container.innerHTML = `<p style="color: #ef4444;">Failed to load logs: ${error.message}</p>`;
+    }
+}
+
+async function clearSystemLogs() {
+    if (!confirm('Are you sure you want to clear all system logs? This cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/system-logs/clear', {
+            method: 'POST'
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            showNotification('Logs cleared successfully', 'success');
+            fetchSystemLogs(); // Refresh the view (will show "No logs available")
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (error) {
+        showNotification('Failed to clear logs: ' + error.message, 'error');
+    }
+}
+
+// Auto-load logs if on the logs tab (rudimentary check or init)
+document.addEventListener('DOMContentLoaded', () => {
+    // ... existing init ...
+
+    // Hook into tab clicks to auto-refresh logs when clicking "System Logs"
+    const logTabBtn = document.querySelector('button[data-tab="tab-logs"]');
+    if (logTabBtn) {
+        logTabBtn.addEventListener('click', fetchSystemLogs);
+    }
+});

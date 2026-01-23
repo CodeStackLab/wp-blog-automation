@@ -7,55 +7,87 @@ const path = require('path');
 const fs = require('fs');
 const cron = require('node-cron');
 const crypto = require('crypto');
-const sharp = require('sharp');
 require('dotenv').config();
 
 const app = express();
 
 const BLOG_RULES = `
-✅ BLOG LENGTH & PURPOSE
+STRICT BLOGGING RULES:
+1. BLOG LENGTH & PURPOSE:
+   - Minimum 900+ words per blog.
+   - Written to be educational, viral, and SEO-driven.
+   - Focused on inspection deficiencies, safety issues, or common inspection findings.
+   - Written for home buyers, homeowners, and agents.
+   - Promote "Inspection Time" naturally (not salesy).
 
-Minimum 900+ words per blog
+2. SEO TITLE (H1) RULES:
+   - Focus keyword must be the very first words in the H1.
+   - Must include one strong power word (Hidden, Dangerous, Costly, Serious, Critical, etc.).
+   - Should include a number when appropriate.
+   - Target 67 characters or less.
+   - Negative/emotional language is intentional and preferred.
+   - Do not repeat the focus keyword excessively in the title.
 
-Written to be educational, viral, and SEO-driven
+3. FOCUS KEYWORD RULES (STRICT):
+   - Focus keyword must appear:
+     - At the start of the H1.
+     - In the first sentence of the blog.
+     - In at least one H2 or H3.
+   - Target keyword density: ~2.25% (acceptable ~2.2–2.3%).
+   - Avoid keyword stuffing.
+   - Use semantic variations and synonyms throughout.
+   - Exact-match usage must be tightly controlled.
 
-Focused on inspection deficiencies, safety issues, or common inspection findings
+4. BLOG STRUCTURE:
+   - Clear H2 / H3 headings.
+   - Easy-to-understand explanations.
+   - Inspector-authority tone without alarmism.
+   - Include a "Relevant Standards" section when applicable.
+   - IRC / IMC / IFGC / NEC / manufacturer listings.
+   - Educational only, not enforcement language.
 
-Written for home buyers, homeowners, and agents
+5. LOCAL SEO RULES (MANDATORY):
+   - Each blog must naturally reference Texas service areas, rotated and non-spammy:
+   - Central Texas, North Texas, Dallas, Houston, San Antonio, Corpus Christi, Surrounding areas.
 
-Promote Inspection Time naturally (not salesy)
+6. IMAGES (REQUIRED):
+   - AI-generated images only (no uploads).
+   - Include a featured image.
+   - Include additional images where helpful.
+   - Each image must have: Alt text, Image title, Caption, Image description.
 
-✅ SEO TITLE (H1) RULES
+7. STYLE, TONE & LIABILITY:
+   - Professional and educational.
+   - Not alarmist.
+   - No DIY instructions.
+   - No code-enforcement language.
+   - Written to reduce legal exposure.
+   - Clear inspector expertise without guarantees.
 
-Focus keyword must be the very first words in the H1
+8. REQUIRED DELIVERABLES (EVERY BLOG):
+   - You require ALL of the following every time:
+   - Blog title
+   - Blog description (900+ characters)
+   - Post title
+   - Meta description
+   - Focus keyword
+   - Featured image
+   - Featured image alt text
+   - Featured image title
+   - Featured image caption
+   - Featured image description
+   - Blog tags
+   - Hashtags
+   - Matching social posts for: Facebook, Instagram, Alignable, X (Twitter), Threads.
 
-Must include one strong power word (Hidden, Dangerous, Costly, Serious, Critical, etc.)
-
-Should include a number when appropriate
-
-Target 67 characters or less
-
-Negative/emotional language is intentional and preferred
-
-Do not repeat the focus keyword excessively in the title
-
-✅ FOCUS KEYWORD RULES (STRICT)
-
-Focus keyword must appear:
-
-At the start of the H1
-
-In the first sentence of the blog
-
-In at least one H2 or H3
-
-Target keyword density: ~2.25% (acceptable ~2.2–2.3%)
-
-Avoid keyword stuffing
-
-Use semantic variations and synonyms throughout
-
-Exact-match usage must be tightly controlled
+9. FINAL ENFORCEMENT RULES:
+   - SEO tool warnings about negative sentiment = ignore.
+   - One blog at a time unless requested otherwise.
+   - Never forget:
+     - Keyword placement rules.
+     - Relevant Standards section.
+     - Images + metadata.
+     - Texas service-area mentions.
 `;
 const PORT = process.env.PORT || 3000;
 
@@ -89,16 +121,16 @@ const defaultConfig = {
     openai: {
         apiKey: '',
         contentModel: 'gpt-4o',
-        imageModel: 'openai:4@1' // Runware Nano Banana High Quality Model
+        imageModel: 'gpt-image-1.5'
     },
     imageGeneration: {
         featuredEnabled: true,
         inlineEnabled: false,
-        inlineFrequency: 0,
-        size: '1216x640', // Runware Safe Size (Multiple of 64)
+        inlineFrequency: 2,
+        size: '1200x628',
         quality: 'hd',
         style: 'vivid',
-        provider: 'pixabay', // Default to Stock as per user request
+        provider: 'dalle',
     },
     youtube: {
         apiKey: '',
@@ -108,7 +140,7 @@ const defaultConfig = {
     stockImages: {
         unsplashApiKey: '',
         pexelsApiKey: '',
-        pixabayApiKey: '',
+        pixabayApiKey: ''
     },
     runware: {
         apiKey: ''
@@ -130,7 +162,7 @@ const defaultConfig = {
         defaultKeywords: '',
         customPrompt: '',
         imageCustomPrompt: '',
-        articleLength: '1200-1500',
+        articleLength: '1000-1500',
         imagesPerPost: 1,
         includeInternalLinks: true,
         internalLinksCount: 3,
@@ -173,59 +205,14 @@ if (fs.existsSync(CONFIG_FILE)) {
     }
 }
 
-// --- System Logging Infrastructure ---
-const SYSTEM_LOGS = [];
-const MAX_LOGS = 500;
-
-function addLog(level, message, meta = null) {
-    const logEntry = {
-        timestamp: new Date().toISOString(),
-        level, // 'info', 'error', 'success', 'warning'
-        message,
-        meta: meta ? (typeof meta === 'object' ? JSON.stringify(meta) : String(meta)) : null
-    };
-    SYSTEM_LOGS.unshift(logEntry);
-    if (SYSTEM_LOGS.length > MAX_LOGS) SYSTEM_LOGS.pop();
-
-    // Output to console with color for dev visibility
-    const color = level === 'error' ? '\x1b[31m' : (level === 'success' ? '\x1b[32m' : (level === 'warning' ? '\x1b[33m' : '\x1b[36m'));
-    const metaStr = meta ? ` | ${typeof meta === 'object' ? JSON.stringify(meta) : meta}` : '';
-    console.log(`${color}[${level.toUpperCase()}] ${message}\x1b[0m${metaStr}`);
-}
-
-// Override default console for better capturing (optional, but let's keep separate for safety)
-
-// ...
-
 function saveConfig() {
     try {
         fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
-        addLog('info', 'Configuration saved to disk');
+        console.log('Saved configuration to disk');
     } catch (error) {
         console.error('Error saving config:', error);
-        addLog('error', 'Failed to save configuration', error.message);
     }
 }
-
-// Authentication middleware
-const requireAuth = (req, res, next) => {
-    if (req.session.authenticated) {
-        next();
-    } else {
-        res.redirect('/login');
-    }
-};
-
-// API to fetch logs
-app.get('/api/system-logs', requireAuth, (req, res) => {
-    res.json(SYSTEM_LOGS);
-});
-
-// API to clear logs
-app.post('/api/system-logs/clear', requireAuth, (req, res) => {
-    SYSTEM_LOGS.length = 0; // Clear array in-place
-    res.json({ success: true, message: 'Logs cleared successfully' });
-});
 
 
 
@@ -264,13 +251,10 @@ async function runSingleAutomationTask() {
 
         if (!topic) {
             console.log('No keywords configured for automation.');
-            addLog('warning', 'Automation ran but no keywords configured');
             return;
         }
 
         console.log(`Generating article for topic: ${topic}`);
-        addLog('info', `Automation Task Started: ${topic}`);
-
 
 
         // 3. Generate Content (Reuse logic from /api/generate-article but via internal call or refactoring)
@@ -280,105 +264,40 @@ async function runSingleAutomationTask() {
             return;
         }
 
-        // Log all configuration settings being used
-        addLog('info', 'Automation Configuration', {
-            topic: topic,
-            articleLength: config.content.articleLength,
-            imageProvider: config.imageGeneration.provider,
-            imageModel: config.openai.imageModel,
-            imageSize: config.imageGeneration.size,
-            imageQuality: config.imageGeneration.quality,
-            imageStyle: config.imageGeneration.style,
-            imagesPerPost: config.content.imagesPerPost,
-            internalLinks: config.content.internalLinksCount,
-            outboundLinks: config.content.outboundLinksCount,
-            readAlsoCount: config.content.readAlsoCount,
-            youtubeEnabled: config.youtube.enabled,
-            customPrompt: config.content.customPrompt ? 'Yes' : 'No',
-            imageCustomPrompt: config.content.imageCustomPrompt ? 'Yes' : 'No',
-            articleInstructions: config.content.articleInstructions ? 'Yes' : 'No'
-        });
-
-        // Generate Article logic - Using ALL configuration settings
+        // Generate Article logic
         const articleData = await generateArticleLogic({
-            // Topic & Keywords (from Keywords Configuration tab)
             topic: topic,
             keywords: topic,
             tone: 'professional',
-
-            // Article Settings (from Instructions & Prompts tab)
             length: config.content.articleLength,
             customPrompt: config.content.customPrompt,
-            articleInstructions: config.content.articleInstructions,
-
-            // Image Generation Settings (from Image Generation tab)
-            imageProvider: config.imageGeneration.provider, // Use Default (Runware)
-            imageModel: config.openai.imageModel, // Use Default (Nano Banana Pro)
-            imageCustomPrompt: config.content.imageCustomPrompt,
-            featuredEnabled: true,
-            inlineEnabled: false, // Ensure Disabled
-            inlineFrequency: 0,
-            imageSize: config.imageGeneration.size,
-            imageQuality: config.imageGeneration.quality,
-            imageStyle: config.imageGeneration.style,
-            imagesPerPost: 0,
-
-            // YouTube Settings 
-            youtubeEnabled: false, // FORCE DISABLED
-            youtubeFrequency: 0,
-
-            // SEO & Structure Settings (from SEO Configuration tab)
+            imageProvider: config.imageGeneration.provider,
+            featuredEnabled: config.imageGeneration.featuredEnabled,
+            inlineEnabled: config.imageGeneration.inlineEnabled,
+            inlineFrequency: config.imageGeneration.inlineFrequency,
+            youtubeEnabled: config.youtube.enabled,
+            youtubeFrequency: config.youtube.frequency,
+            autoTags: config.automation.autoCreateTags,
+            // Pass all missing parameters for full functionality
             includeInternalLinks: config.content.includeInternalLinks,
             internalLinksCount: config.content.internalLinksCount,
             includeOutboundLinks: config.content.includeOutboundLinks,
             outboundLinksCount: config.content.outboundLinksCount,
             includeReadAlso: config.content.includeReadAlso,
             readAlsoCount: config.content.readAlsoCount,
-
-            // Call to Action Settings (from Article Settings)
             includeCallToAction: config.content.includeCallToAction,
             callToActionText: config.content.callToActionText,
             callToActionUrl: config.content.callToActionUrl,
-
-            // Automation Settings
-            autoTags: config.automation.autoCreateTags
+            imagesPerPost: config.content.imagesPerPost
         });
 
         // Publish to WordPress logic
         const auth = Buffer.from(`${config.wordpress.username}:${config.wordpress.appPassword}`).toString('base64');
 
-        // Ensure Category exists to avoid "Uncategorized"
-        let categoryId = 1; // Default
-        if (config.automation.autoCreateCategories) {
-            try {
-                // Check if exists
-                const catsRes = await axios.get(`${config.wordpress.siteUrl}/wp-json/wp/v2/categories?search=${encodeURIComponent(topic)}`, {
-                    headers: { 'Authorization': `Basic ${auth}` }
-                });
-
-                if (catsRes.data && catsRes.data.length > 0) {
-                    categoryId = catsRes.data[0].id; // Use best match
-                } else {
-                    // Create new
-                    const createCatRes = await axios.post(`${config.wordpress.siteUrl}/wp-json/wp/v2/categories`, {
-                        name: topic
-                    }, {
-                        headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' }
-                    });
-                    categoryId = createCatRes.data.id;
-                    addLog('info', `Created new category: ${topic}`);
-                }
-            } catch (catErr) {
-                console.error('Category error:', catErr.message);
-                addLog('warning', 'Failed to handle category, using default.');
-            }
-        }
-
         const postData = {
             title: articleData.title,
             content: articleData.content,
             status: 'publish',
-            categories: [categoryId], // Assign the category
             tags: [],
             featured_media: undefined // We need to handle this below
         };
@@ -386,27 +305,16 @@ async function runSingleAutomationTask() {
         // Handle Featured Image Upload if URL exists
         if (articleData.featuredImageUrl) {
             try {
-                let imgBuffer;
+                // Upload featured image
+                const imgRes = await axios.get(articleData.featuredImageUrl, { responseType: 'arraybuffer' });
+                const imgBuffer = Buffer.from(imgRes.data, 'binary');
 
-                // Check if it's a base64 data URL (from resizer) or regular URL
-                if (articleData.featuredImageUrl.startsWith('data:image')) {
-                    // Extract base64 data from data URL
-                    const base64Data = articleData.featuredImageUrl.split(',')[1];
-                    imgBuffer = Buffer.from(base64Data, 'base64');
-                    addLog('info', 'Uploading resized image to WordPress...');
-                } else {
-                    // Download image from URL
-                    const imgRes = await axios.get(articleData.featuredImageUrl, { responseType: 'arraybuffer' });
-                    imgBuffer = Buffer.from(imgRes.data, 'binary');
-                    addLog('info', 'Uploading original image to WordPress...');
-                }
-
-                // Upload image directly to WordPress
+                // 1. Upload binary
                 const uploadRes = await axios.post(`${config.wordpress.siteUrl}/wp-json/wp/v2/media`, imgBuffer, {
                     headers: {
                         'Authorization': `Basic ${auth}`,
-                        'Content-Type': 'image/jpeg',
-                        'Content-Disposition': `attachment; filename="featured-${Date.now()}.jpg"`
+                        'Content-Type': 'image/png',
+                        'Content-Disposition': `attachment; filename="featured-${Date.now()}.png"`
                     }
                 });
 
@@ -429,11 +337,8 @@ async function runSingleAutomationTask() {
                     });
                 }
 
-                addLog('success', 'Featured image uploaded to WordPress', { mediaId });
-
             } catch (err) {
                 console.error('Failed to upload/update featured image:', err.message);
-                addLog('error', 'Failed to upload featured image', err.message);
             }
         }
 
@@ -442,7 +347,14 @@ async function runSingleAutomationTask() {
             postData.excerpt = articleData.meta_description;
         }
 
-
+        // Append Deliverables to Content (Social Posts, etc.)
+        if (articleData.social_posts) { // Check if exists
+            let deliverablesHtml = '<hr><h3>📢 Social Media Deliverables</h3>';
+            for (const [platform, post] of Object.entries(articleData.social_posts)) {
+                deliverablesHtml += `<h4>${platform.charAt(0).toUpperCase() + platform.slice(1)}</h4><p>${post}</p>`;
+            }
+            postData.content += deliverablesHtml;
+        }
 
 
         const wpRes = await axios.post(`${config.wordpress.siteUrl}/wp-json/wp/v2/posts`, postData, {
@@ -462,15 +374,12 @@ async function runSingleAutomationTask() {
         });
 
         console.log(`Successfully published article: ${articleData.title} (ID: ${wpRes.data.id})`);
-        addLog('success', `Article published successfully to WordPress`, { postId: wpRes.data.id, link: wpRes.data.link });
 
     } catch (error) {
         console.error('Automation task failed:', error.message);
-        addLog('error', 'Automation task completed with errors', error.message);
     } finally {
         isAutomationRunning = false;
         console.log('Automation task finished. Lock released.');
-        addLog('info', 'Automation task sequence finished');
     }
 }
 
@@ -555,7 +464,13 @@ function manageScheduler() {
 }
 
 // Authentication middleware
-
+const requireAuth = (req, res, next) => {
+    if (req.session.authenticated) {
+        next();
+    } else {
+        res.redirect('/login');
+    }
+};
 
 // Routes
 app.get('/', requireAuth, (req, res) => {
@@ -616,17 +531,6 @@ app.get('/api/config', requireAuth, (req, res) => {
     res.json(safeConfig);
 });
 
-// Health Check Endpoint
-app.get('/health', (req, res) => {
-    const health = {
-        uptime: process.uptime(),
-        timestamp: Date.now(),
-        status: 'OK',
-        memory: process.memoryUsage()
-    };
-    res.json(health);
-});
-
 app.post('/api/settings', requireAuth, async (req, res) => {
     try {
         const {
@@ -634,7 +538,7 @@ app.post('/api/settings', requireAuth, async (req, res) => {
             openaiApiKey, contentModel, imageModel,
             imageFeaturedEnabled, imageInlineEnabled, imageInlineFrequency, imageSize, imageQuality, imageStyle, imageProvider, // Updated image params
             youtubeApiKey, youtubeEnabled, youtubeFrequency, // New YouTube params
-            unsplashApiKey, pexelsApiKey, pixabayApiKey, runwareApiKey, googleApiKey, googleSearchEngineId, // Added Google
+            unsplashApiKey, pexelsApiKey, pixabayApiKey,
             defaultKeywords, customPrompt, imageCustomPrompt, imagesPerPost, articleLength,
             includeInternalLinks, internalLinksCount, includeReadAlso, readAlsoCount,
             includeCallToAction, callToActionText, callToActionUrl,
@@ -653,14 +557,6 @@ app.post('/api/settings', requireAuth, async (req, res) => {
         if (contentModel !== undefined) config.openai.contentModel = contentModel;
         if (imageModel !== undefined) config.openai.imageModel = imageModel;
 
-        if (runwareApiKey && runwareApiKey !== '********') {
-            if (!config.runware) config.runware = {};
-            config.runware.apiKey = runwareApiKey;
-        }
-
-        if (googleApiKey && googleApiKey !== '********') config.stockImages.googleApiKey = googleApiKey;
-        if (googleSearchEngineId !== undefined) config.stockImages.googleSearchEngineId = googleSearchEngineId;
-
         // Image Settings
         if (imageFeaturedEnabled !== undefined) config.imageGeneration.featuredEnabled = imageFeaturedEnabled;
         if (imageInlineEnabled !== undefined) config.imageGeneration.inlineEnabled = imageInlineEnabled;
@@ -678,7 +574,6 @@ app.post('/api/settings', requireAuth, async (req, res) => {
         if (unsplashApiKey && unsplashApiKey !== '********') config.stockImages.unsplashApiKey = unsplashApiKey;
         if (pexelsApiKey && pexelsApiKey !== '********') config.stockImages.pexelsApiKey = pexelsApiKey;
         if (pixabayApiKey && pixabayApiKey !== '********') config.stockImages.pixabayApiKey = pixabayApiKey;
-
 
         if (defaultKeywords !== undefined) config.content.defaultKeywords = defaultKeywords;
         if (customPrompt !== undefined) config.content.customPrompt = customPrompt;
@@ -1004,8 +899,6 @@ async function searchStockImages(provider, query, count = 1) {
                 credit: `Image by ${img.user} from Pixabay`,
                 source: 'Pixabay'
             }));
-        } else if (provider === 'google' && config.stockImages.googleApiKey && config.stockImages.googleSearchEngineId) {
-            images = await searchGoogleImages(query, count);
         }
 
         return images;
@@ -1013,12 +906,6 @@ async function searchStockImages(provider, query, count = 1) {
         console.error(`Error fetching stock images from ${provider}:`, error.message);
         return [];
     }
-}
-
-// Helper: Get Single Stock Image (Wrapper)
-async function getStockImage(query, provider) {
-    const images = await searchStockImages(provider, query, 1);
-    return images.length > 0 ? images[0].url : '';
 }
 
 // Helper: Search YouTube Videos
@@ -1043,41 +930,6 @@ async function searchYoutubeVideos(query, count = 1) {
         }));
     } catch (error) {
         console.error('Error searching YouTube:', error.message);
-        return [];
-    }
-}
-
-// Helper: Search Google Images
-async function searchGoogleImages(query, count = 1) {
-    try {
-        if (!config.stockImages.googleApiKey || !config.stockImages.googleSearchEngineId) {
-            console.error('Missing Google Search API Key or CX ID');
-            return [];
-        }
-
-        const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
-            params: {
-                q: query,
-                cx: config.stockImages.googleSearchEngineId,
-                key: config.stockImages.googleApiKey,
-                searchType: 'image',
-                num: Math.min(count, 10), // Max 10 per request
-                safe: 'active',
-                imgSize: 'large' // Prefer large images
-            }
-        });
-
-        if (!response.data.items) return [];
-
-        return response.data.items.map(item => ({
-            url: item.link,
-            credit: `Image from ${item.displayLink}`,
-            source: 'Google',
-            thumbnail: item.image.thumbnailLink
-        }));
-    } catch (error) {
-        console.error('Error searching Google Images:', error.message);
-        addLog('error', 'Google Image Search failed', error.message);
         return [];
     }
 }
@@ -1115,11 +967,7 @@ async function generateArticleLogic(params) {
         includeOutboundLinks, outboundLinksCount,
         includeCallToAction, callToActionText, callToActionUrl,
         includeReadAlso, readAlsoCount,
-        imagesPerPost, // Added parameter
-        // Image generation settings
-        imageSize, imageQuality, imageStyle, imageCustomPrompt,
-        // Article instructions
-        articleInstructions
+        imagesPerPost // Added parameter
     } = params;
 
     // --- Configuration Overrides ---
@@ -1132,41 +980,28 @@ async function generateArticleLogic(params) {
     const effectiveOutboundCount = outboundLinksCount || config.content.outboundLinksCount || 5;
 
     // Image Count Override - FORCE 4-5 Images
-    // Image Count Override
-    const effectiveImageCount = imagesPerPost !== undefined ? imagesPerPost : (config.content.imagesPerPost || 5);
+    const effectiveImageCount = imagesPerPost || config.content.imagesPerPost || 5;
 
     // --- Configuration Overrides ---
     // Use params if provided, otherwise fall back to global config
     const effectiveApiKey = apiKey || config.openai.apiKey;
     const effectiveContentModel = contentModel || config.openai.contentModel || 'gpt-4';
 
-    const effectiveFeatured = featuredEnabled !== undefined ? featuredEnabled : config.imageGeneration.featuredEnabled;
-    const effectiveInline = inlineEnabled !== undefined ? inlineEnabled : config.imageGeneration.inlineEnabled;
-    const effectiveInlineFreq = inlineFrequency !== undefined ? inlineFrequency : config.imageGeneration.inlineFrequency;
-    const effectiveYoutube = youtubeEnabled !== undefined ? youtubeEnabled : config.youtube.enabled;
-    const effectiveYoutubeFreq = youtubeFrequency !== undefined ? youtubeFrequency : config.youtube.frequency;
+    const effectiveFeatured = true; // FORCE TRUE
+    const effectiveInline = true; // FORCE TRUE
+    const effectiveInlineFreq = 2; // Frequent images
+    const effectiveYoutube = true; // FORCE TRUE
+    const effectiveYoutubeFreq = 3;
     const provider = imageProvider || config.imageGeneration.provider || 'dalle';
 
     const effectivePrompt = customPrompt || config.content.customPrompt || '';
     const effectiveLength = length || config.content.articleLength || '1000-1500';
 
     // --- System Prompt Construction ---
-    let systemPrompt = `You are a professional content writer. Write a detailed, HIGH-QUALITY blog post of at least ${effectiveLength} words about "${topic}".
-    
-    CRITICAL INSTRUCTIONS:
-    1. LENGTH: The article MUST be MINIMUM 1000 words and MAXIMUM 1500 words. This is MANDATORY. Use long, detailed paragraphs with comprehensive explanations.
-    2. FORMAT: Output valid JSON only.
-    3. NO PLACEHOLDERS IN TEXT: Do not leave any [Social Media] or [Meta] sections in the "content" HTML field. 
-    4. IMAGES: You MUST include [IMAGE_PLACEHOLDER: search_term] tags in the content.
-    5. NO INTRODUCTION HEADING: Do NOT use "Introduction" as a heading. Start directly with the hook or first section.
-    `;
+    let systemPrompt = `You are a professional content writer. Write a ${effectiveLength} words blog post about "${topic}".`;
 
     if (effectivePrompt) {
         systemPrompt += `\nCustom Instructions: ${effectivePrompt}`;
-    }
-
-    if (articleInstructions) {
-        systemPrompt += `\nAdditional Article Instructions: ${articleInstructions}`;
     }
 
     systemPrompt += `\nKeywords to include: ${keywords || 'N/A'}
@@ -1174,21 +1009,32 @@ async function generateArticleLogic(params) {
     
     ${BLOG_RULES}
     
+    Structuring Requirements:
+    1. Engaging Title
+    2. Compelling Introduction
+    3. Well-structured body with H2 and H3 subheadings
+    4. Conclusion
+    
     IMPORTANT: Format the response as a strict JSON object with the following keys:
     {
       "title": "string",
-      "content": "string (HTML format tags: <h2>, <h3>, <p>, <ul>, <li>, <strong>. DO NOT include <html>, <head>, <body> tags. DO NOT include social posts here.)",
+      "content": "string (HTML format, use <h2>, <h3>, <p>, <ul>, <li> tags)",
       "meta_description": "string (Optimized for SEO)",
+      "focus_keyword": "string",
       "tags": ["array", "of", "strings"],
       "featured_image": {
-         "prompt": "string (Detailed prompt for AI generator - detailed, photorealistic, no text)",
-         "alt_text": "string"
+         "prompt": "string (Detailed prompt for AI generator)",
+         "alt_text": "string",
+         "title": "string",
+         "caption": "string",
+         "description": "string"
       },
       "social_posts": {
          "facebook": "string",
          "instagram": "string",
+         "alignable": "string",
          "twitter": "string",
-         "linkedin": "string"
+         "threads": "string"
       }
     }`;
 
@@ -1199,30 +1045,33 @@ async function generateArticleLogic(params) {
     if (effectiveInline) {
         systemPrompt += `
         
-        INLINE IMAGE RULES (MANDATORY):
-        - Insert exactly ${effectiveImageCount} [IMAGE_PLACEHOLDER: search_term] tags within the body content.
-        - Place them evenly: one after the 1st H2, one after the 3rd H2, and so on.
-        - The "search_term" must be a concrete, visual noun phrase (e.g. "modern kitchen island lighting").
-        `;
+        INLINE IMAGE INSTRUCTIONS:
+        Insert the text "[IMAGE_PLACEHOLDER: <search_term>]" in the content according to these EXACT rules:
+        1. Insert 1st image after the FIRST Heading 2 (H2).
+        2. Insert 2nd image after the THIRD Heading 2 (H2).
+        3. Insert 3rd image after the FIFTH Heading 2 (H2).
+        4. Insert 4th image after the SEVENTH Heading 2 (H2) or before Conclusion.
+        - You MUST include at least 4 images total.
+        - The "search_term" inside the placeholder MUST be 2-3 specific words valid for a stock photo search (e.g., "broken roof shingles", "electrical panel wiring", "mold in drywall").
+        - The search term MUST be directly relevant to the specific content of the Heading it follows.
+        - DO NOT use sentences. DO NOT use abstract concepts. Use concrete visual nouns.`;
     }
 
     if (effectiveYoutube) {
-        systemPrompt += `\n\nVIDEO RULE: Insert exactly one [VIDEO_PLACEHOLDER: search_query] tag randomly inside the article body (e.g. after the 2nd or 3rd H2). DO NOT place it at the very end or beginning.`;
+        systemPrompt += `\n\nVIDEO INSTRUCTIONS:\nInsert "[VIDEO_PLACEHOLDER: <search query>]" at the very end of the article, before the Conclusion.`;
     }
 
 
 
     if (effectiveInternalLinks) {
-        systemPrompt += `\n\nINTERNAL LINKS: Include 3-4 [INTERNAL_LINK: anchor text | search topic] tags naturally within paragraphs.`;
+        systemPrompt += `\n\nINTERNAL LINKING:\nIdentify ${effectiveInternalCount} opportunities to link to related content on the site. Use the format [INTERNAL_LINK: <anchor text> | <target topic>] so they can be replaced later.`;
     }
 
     if (effectiveOutboundLinks) {
-        systemPrompt += `\n\nOUTBOUND LINKS: Include 2-3 [OUTBOUND_LINK: anchor text | url] tags to authoritative sources.`;
+        systemPrompt += `\n\nOUTBOUND LINKING:\nInclude ${effectiveOutboundCount} references to authoritative sources. Use the format [OUTBOUND_LINK: <anchor text> | <suggested url or domain>] so they can be reviewed.`;
     }
 
     // --- Content Generation ---
-    addLog('info', `Starting article generation for topic: "${topic}"`, { model: effectiveContentModel });
-
     const response = await axios.post('https://api.openai.com/v1/chat/completions', {
         model: effectiveContentModel,
         messages: [
@@ -1250,10 +1099,8 @@ async function generateArticleLogic(params) {
             rawContent = rawContent.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
         }
         contentObj = JSON.parse(rawContent);
-        addLog('success', 'Article content generated successfully', { title: contentObj.title, words: contentObj.content.length });
     } catch (e) {
         console.error("Failed to parse JSON response", e);
-        addLog('error', 'Failed to parse JSON response from OpenAI', e.message);
         contentObj = {
             title: `Article about ${topic}`,
             content: `<p>${response.data.choices[0].message.content}</p>`,
@@ -1266,52 +1113,87 @@ async function generateArticleLogic(params) {
 
     // --- 1. Featured Image Generation ---
     if (effectiveFeatured) {
-        let prompt = contentObj.featured_image?.prompt || contentObj.featured_image_prompt || `Featured image for article about ${topic}`;
-
-        // Add custom image prompt instructions if provided
-        if (imageCustomPrompt) {
-            prompt = `${prompt}. Style: ${imageCustomPrompt}`;
-        }
-
+        const prompt = contentObj.featured_image?.prompt || contentObj.featured_image_prompt || `Featured image for article about ${topic}`;
         try {
-            const provider = config.imageGeneration.provider || 'pixabay';
-            const aiProviders = ['runware', 'dalle', 'dall-e-3', 'openai', 'gpt-image-1.5', 'gpt-image-1', 'chatgpt-image-latest'];
+            if (isAIProvider(provider)) {
 
-            if (aiProviders.includes(provider) || (provider === 'openai' && config.openai.apiKey)) {
-                addLog('info', `Generating Featured Image with ${provider}...`, { prompt });
-                featuredImageUrl = await generateAiImage(topic, config, prompt);
+                if (provider === 'runware') {
+                    // --- RUNWARE IMPLEMENTATION ---
+                    const runwareKey = config.runware?.apiKey;
+                    if (!runwareKey) throw new Error("Runware API Key not configured");
 
-                if (featuredImageUrl) {
-                    addLog('success', 'Featured image generated successfully', { url: featuredImageUrl });
+                    // Map specific models if needed, or use default
+                    let runwareModel = 'runware:100@1'; // Default Realism
+
+                    // Logic to detect if the user selected a specific Runware model in 'imageModel'
+                    const userModel = params.imageModel || config.openai.imageModel;
+                    if (userModel && (userModel.includes('runware') || userModel.includes('civitai') || userModel.includes('@'))) {
+                        runwareModel = userModel;
+                    }
+
+                    // Runware request structure
+                    const runwarePayload = [
+                        {
+                            "taskType": "authentication",
+                            "apiKey": runwareKey
+                        },
+                        {
+                            "taskType": "imageInference",
+                            "taskUUID": crypto.randomUUID(),
+                            "positivePrompt": prompt,
+                            "modelId": runwareModel,
+                            "height": 1024,
+                            "width": 1024,
+                            "numberResults": 1
+                        }
+                    ];
+
+                    const rwRes = await axios.post('https://api.runware.ai/v1', runwarePayload, {
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    // Parse Runware result
+                    // Structure: { data: [ { taskType: 'imageInference', imageURL: '...' } ] }
+                    if (rwRes.data && rwRes.data.data) {
+                        const infResult = rwRes.data.data.find(t => t.taskType === 'imageInference');
+                        if (infResult && infResult.imageURL) {
+                            featuredImageUrl = infResult.imageURL;
+                        } else {
+                            throw new Error("No image URL in Runware response");
+                        }
+                    }
+
                 } else {
-                    addLog('error', 'Failed to generate featured image');
+                    // --- OPENAI (DALL-E) IMPLEMENTATION ---
+                    let actualModel = params.imageModel || config.openai.imageModel || 'dall-e-3';
+                    // ... mapping logic ...
+                    if (actualModel.includes('gpt-image') || actualModel === 'chatgpt-image-latest') {
+                        actualModel = 'dall-e-3';
+                    }
+
+                    const imageConfig = {
+                        model: actualModel,
+                        prompt: prompt,
+                        n: 1,
+                        size: '1024x1024'
+                    };
+
+                    if (actualModel === 'dall-e-3') {
+                        imageConfig.quality = 'hd';
+                        imageConfig.style = 'natural';
+                    }
+
+                    const aiRes = await axios.post('https://api.openai.com/v1/images/generations', imageConfig, {
+                        headers: { 'Authorization': `Bearer ${effectiveApiKey}` }
+                    });
+                    featuredImageUrl = aiRes.data.data[0].url;
                 }
             } else {
-                // STOCK IMAGE LOGIC
-                addLog('info', 'Searching for Featured Image from Stock...', { query: topic });
-
-                // Try specific prompt first, else topic
-                const searchQuery = contentObj.featured_image?.prompt ? contentObj.featured_image.prompt.replace(/ photorealistic.*$/, '') : topic;
-                const images = await searchStockImages(provider, searchQuery, 1);
-
-                if (images.length > 0) {
-                    featuredImageUrl = images[0].url;
-                    addLog('success', `Featured image fetched from ${provider}`, { url: featuredImageUrl });
-                } else {
-                    addLog('warning', 'No stock images found for specific prompt, trying topic', { topic });
-                    const fallbackImages = await searchStockImages(provider, topic, 1);
-                    if (fallbackImages.length > 0) {
-                        featuredImageUrl = fallbackImages[0].url;
-                        addLog('success', `Featured image fetched from ${provider} (fallback tag)`, { url: featuredImageUrl });
-                    } else {
-                        addLog('error', 'No stock images found for topic');
-                    }
-                }
+                // Stock photo logic
+                featuredImageUrl = await getStockImage(prompt, provider);
             }
         } catch (err) {
-            console.error('Featured image fetch failed:', err.message);
-            addLog('error', 'Featured image fetch failed', err.message);
-            featuredImageUrl = '';
+            console.error('Featured image error:', err.message);
         }
     }
 
@@ -1320,122 +1202,139 @@ async function generateArticleLogic(params) {
 
     // --- 2. Inline Image Processing (Placeholders) ---
     if (effectiveInline) {
-        // Regex to catch [IMAGE_PLACEHOLDER: query] or even loose formats
-        const placeholderRegex = /\[IMAGE_PLACEHOLDER:?\s*(.*?)\]/gi;
+        const placeholderRegex = /\[IMAGE_PLACEHOLDER:\s*(.*?)\]/g;
         let match;
         let replacements = [];
 
-        // Collect all matches first
         while ((match = placeholderRegex.exec(processedContent)) !== null) {
-            replacements.push({ fullMatch: match[0], query: match[1].trim() });
+            replacements.push({ fullMatch: match[0], query: match[1] });
         }
-
-        addLog('info', `Found ${replacements.length} inline image placeholders`);
-
-        // --- Helper: Upload Image to WordPress to ensure correct size/handling ---
-        const uploadImageToWordPress = async (imageUrl, altText) => {
-            const wpUrl = config.wordpress.siteUrl.replace(/\/$/, '');
-            const auth = Buffer.from(`${config.wordpress.username}:${config.wordpress.appPassword}`).toString('base64');
-            try {
-                addLog('info', 'Uploading image to WordPress...', { url: imageUrl });
-
-                const imgRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-                const imgBuffer = Buffer.from(imgRes.data, 'binary');
-                const filename = `inline-${crypto.randomUUID()}.png`; // Use PNG/JPG
-
-                const uploadRes = await axios.post(`${wpUrl}/wp-json/wp/v2/media`, imgBuffer, {
-                    headers: {
-                        'Authorization': `Basic ${auth}`,
-                        'Content-Type': 'image/png',
-                        'Content-Disposition': `attachment; filename="${filename}"`
-                    }
-                });
-
-                // Return the full source URL that WordPress provides (it might create sizes)
-                // We prefer the 'large' or 'full' size
-                if (uploadRes.data.media_details && uploadRes.data.media_details.sizes && uploadRes.data.media_details.sizes.large) {
-                    return uploadRes.data.media_details.sizes.large.source_url;
-                }
-                return uploadRes.data.source_url;
-            } catch (err) {
-                console.error("Failed to upload inline image to WP:", err.message);
-                addLog('error', 'Failed to upload inline image to WordPress', err.message);
-                return imageUrl; // Fallback to external URL
-            }
-        };
 
         for (const item of replacements) {
             let imageUrl = '';
             try {
-                // Determine Stock Provider
-                let stockProvider = config.imageGeneration.provider || 'pixabay';
-                if (stockProvider === 'runware') stockProvider = 'pixabay';
+                if (isAIProvider(provider)) {
+                    // Map GPT Image models to actual DALL-E models
+                    let actualModel = config.openai.imageModel || 'dall-e-3';
+                    if (actualModel.includes('gpt-image') || actualModel === 'chatgpt-image-latest') {
+                        actualModel = 'dall-e-3';
+                    }
 
-                const images = await searchStockImages(stockProvider, item.query, 1);
+                    const imageConfig = {
+                        model: actualModel,
+                        prompt: item.query,
+                        n: 1,
+                        size: '1024x1024'
+                    };
 
-                if (images.length > 0) {
-                    imageUrl = images[0].url;
+                    // Only dall-e-3 supports quality and style
+                    if (actualModel === 'dall-e-3') {
+                        imageConfig.quality = config.imageGeneration.quality || 'standard';
+                        imageConfig.style = config.imageGeneration.style || 'vivid';
+                    }
+
+                    const aiRes = await axios.post('https://api.openai.com/v1/images/generations', imageConfig, {
+                        headers: { 'Authorization': `Bearer ${config.openai.apiKey}` }
+                    });
+                    imageUrl = aiRes.data.data[0].url;
                 } else {
-                    // Try simplified query?
-                    throw new Error("No stock images found");
+                    const stockImages = await searchStockImages(provider, item.query, 1);
+                    if (stockImages.length > 0) imageUrl = stockImages[0].url;
                 }
 
                 if (imageUrl) {
-                    // UPLOAD TO WORDPRESS
-                    const wpImageUrl = await uploadImageToWordPress(imageUrl, item.query);
                     processedContent = processedContent.replace(item.fullMatch,
-                        `<figure><img src="${wpImageUrl}" alt="${item.query}" class="article-image"><figcaption>${item.query}</figcaption></figure>`);
-                    addLog('success', `Inline image fetched from ${stockProvider}`, { query: item.query });
+                        `<figure><img src="${imageUrl}" alt="${item.query}" class="article-image"></figure>`);
+                } else {
+                    processedContent = processedContent.replace(item.fullMatch, '');
                 }
             } catch (e) {
-                console.error("Inline image processing error:", e.message);
-                addLog('warning', 'Inline stock image fetch failed', e.message);
-                // Remove placeholder if generation fails
+                console.error('Inline Image Error:', e.message);
+                if (e.response) {
+                    console.error('API Error Response:', e.response.data);
+                }
                 processedContent = processedContent.replace(item.fullMatch, '');
             }
         }
     }
 
-    // --- 3. YouTube Embed Processing (Placeholder Based) ---
+    // --- 3. YouTube Embed Processing (Deterministic Injection) ---
     if (effectiveYoutube && config.youtube.apiKey) {
-        // Look for explicitly placed video tags first
-        const videoRegex = /\[VIDEO_PLACEHOLDER:\s*(.*?)\]/gi;
-        let vMatch;
-        let vFound = false;
+        // Simple logic: Split by </h2>. insert embed after every N matches.
+        // We need to extract the Heading text to search for a relevant video!
 
-        let vMatches = [];
-        while ((vMatch = videoRegex.exec(processedContent)) !== null) {
-            vMatches.push({ full: vMatch[0], query: vMatch[1] });
+        let parts = processedContent.split('</h2>');
+        let newContent = '';
+
+        // Loop through parts (each part ends with </h2> except the last one technically if we split)
+        // Wait, split removes the delimiter. capturing group keeps it?
+        // Better: Replace with a callback or iterator.
+
+        // Let's use regex to match <h2>(.*?)</h2>
+        // We want to insert AFTER the closing tag.
+
+        // A safer way: rebuild content
+        let headingCount = 0;
+        const regex = /<h2(.*?)>(.*?)<\/h2>/gi;
+        let lastIndex = 0;
+        let match;
+        let builtContent = '';
+
+        // We need to handle async in loop. 
+        // regex.exec is sync, but we need to await search.
+        // We'll collect all matches first to avoid infinite loops if we modify string.
+
+        // Actually, simple split is easier if we accept strictly structure.
+        // But let's try a replacement strategy that builds a new string.
+
+        // Alternative: Use Cheerio? No, adds dependency.
+        // Let's try matching all H2s, getting their indices and text.
+
+        let matches = [];
+        while ((match = regex.exec(processedContent)) !== null) {
+            matches.push({
+                full: match[0],
+                text: match[2].replace(/<[^>]*>/g, ''), // Clean HTML tags from heading text
+                index: match.index,
+                length: match[0].length
+            });
         }
 
-        for (const vm of vMatches) {
-            vFound = true;
-            try {
-                const videos = await searchYoutubeVideos(`${vm.query} ${topic}`, 1);
-                if (videos.length > 0) {
-                    const embedHtml = `<div class="youtube-embed"><iframe width="560" height="315" src="https://www.youtube.com/embed/${videos[0].id}" title="${videos[0].title}" frameborder="0" allowfullscreen></iframe></div>`;
-                    processedContent = processedContent.replace(vm.full, embedHtml);
-                    addLog('success', 'YouTube video embedded', { videoId: videos[0].id });
-                } else {
-                    processedContent = processedContent.replace(vm.full, '');
-                    addLog('warning', 'No YouTube video found for query', vm.query);
+        if (matches.length > 0) {
+            let lastCursor = 0;
+            for (let i = 0; i < matches.length; i++) {
+                headingCount++;
+                const m = matches[i];
+
+                // Append text up to the end of this H2
+                builtContent += processedContent.substring(lastCursor, m.index + m.length);
+                lastCursor = m.index + m.length;
+
+                // Check frequency
+                if (headingCount % effectiveYoutubeFreq === 0) {
+                    // Search for video using heading text
+                    const query = `${m.text} ${topic}`; // Combine heading and topic for context
+                    try {
+                        const videos = await searchYoutubeVideos(query, 1);
+                        if (videos.length > 0) {
+                            const videoId = videos[0].id;
+                            const embedHtml = `
+                                <div class="youtube-embed">
+                                    <iframe width="560" height="315" src="https://www.youtube.com/embed/${videoId}" 
+                                    title="${videos[0].title}" frameborder="0" 
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                    allowfullscreen></iframe>
+                                </div>`;
+                            builtContent += embedHtml;
+                        }
+                    } catch (e) {
+                        console.error('YouTube Search Error:', e.message);
+                    }
                 }
-            } catch (e) {
-                processedContent = processedContent.replace(vm.full, '');
-                addLog('error', 'YouTube search failed', e.message);
             }
-        }
-
-        // Fallback: If no placeholder found but enabled, insert at end 
-        if (!vFound) {
-            try {
-                const videos = await searchYoutubeVideos(topic, 1);
-                if (videos.length > 0) {
-                    const embedHtml = `<div class="youtube-embed"><iframe width="560" height="315" src="https://www.youtube.com/embed/${videos[0].id}" title="${videos[0].title}" frameborder="0" allowfullscreen></iframe></div>`;
-                    processedContent += embedHtml;
-                    addLog('success', 'Fallback YouTube video embedded', { videoId: videos[0].id });
-                }
-            } catch (e) { }
+            // Append remaining content
+            builtContent += processedContent.substring(lastCursor);
+            processedContent = builtContent;
         }
     }
 
@@ -1448,8 +1347,6 @@ async function generateArticleLogic(params) {
         while ((match = internalLinkRegex.exec(processedContent)) !== null) {
             matches.push({ full: match[0], text: match[1], topic: match[2] });
         }
-
-        if (matches.length > 0) addLog('info', `Processing ${matches.length} internal link opportunities`);
 
         // Process sequentially to be safe with async
         for (const m of matches) {
@@ -1464,15 +1361,12 @@ async function generateArticleLogic(params) {
                     const post = searchRes.data[0];
                     const linkHtml = `<a href="${post.link}" title="${post.title.rendered}" class="internal-link">${m.text}</a>`;
                     processedContent = processedContent.replace(m.full, linkHtml);
-                    addLog('success', `Internal link created for "${m.topic}"`, { url: post.link });
                 } else {
                     // Not found, keep text only
                     processedContent = processedContent.replace(m.full, m.text);
-                    addLog('warning', `No internal post found for "${m.topic}"`);
                 }
             } catch (e) {
                 console.error(`Internal link processing failed for "${m.topic}":`, e.message);
-                addLog('warning', `Internal link lookup failed for "${m.topic}"`, e.message);
                 processedContent = processedContent.replace(m.full, m.text);
             }
         }
@@ -1487,8 +1381,6 @@ async function generateArticleLogic(params) {
             matches.push({ full: match[0], text: match[1], target: match[2] });
         }
 
-        if (matches.length > 0) addLog('info', `Processing ${matches.length} outbound links`);
-
         for (const m of matches) {
             let url = m.target.trim();
             // Validate if it looks like a URL
@@ -1501,7 +1393,6 @@ async function generateArticleLogic(params) {
 
             const linkHtml = `<a href="${url}" target="_blank" rel="noopener noreferrer" class="outbound-link">${m.text}</a>`;
             processedContent = processedContent.replace(m.full, linkHtml);
-            addLog('success', `Outbound link created for "${m.text}"`, { url: url });
         }
     }
 
@@ -1979,99 +1870,6 @@ app.post('/api/fetch-media', requireAuth, async (req, res) => {
     }
 });
 
-// Test Image Generation Endpoint (Supports Runware, DALL-E, Stock)
-app.post('/api/test/generate-image', requireAuth, async (req, res) => {
-    try {
-        const { provider, model, prompt } = req.body;
-
-        console.log(`Testing image generation. Provider: ${provider}, Model: ${model}, Prompt: ${prompt}`);
-
-        let imageUrl = null;
-
-        if (provider === 'runware') {
-            // --- RUNWARE IMPLEMENTATION ---
-            const runwareKey = config.runware?.apiKey;
-            if (!runwareKey) throw new Error("Runware API Key not configured");
-
-            const runwareModel = model || 'runware:100@1';
-
-            // Runware request structure
-            const runwarePayload = [
-                {
-                    "taskType": "authentication",
-                    "apiKey": runwareKey
-                },
-                {
-                    "taskType": "imageInference",
-                    "taskUUID": crypto.randomUUID(),
-                    "positivePrompt": prompt,
-                    "modelId": runwareModel,
-                    "height": 1024,
-                    "width": 1024,
-                    "numberResults": 1
-                }
-            ];
-
-            const rwRes = await axios.post('https://api.runware.ai/v1', runwarePayload, {
-                headers: { 'Content-Type': 'application/json' }
-            });
-
-            if (rwRes.data && rwRes.data.data) {
-                const infResult = rwRes.data.data.find(t => t.taskType === 'imageInference');
-                if (infResult && infResult.imageURL) {
-                    imageUrl = infResult.imageURL;
-                } else {
-                    throw new Error("No image URL in Runware response");
-                }
-            } else {
-                throw new Error("Invalid Runware response");
-            }
-
-        } else if (['dalle', 'openai', 'dall-e-3', 'dall-e-2'].includes(provider) || (!provider && config.openai.apiKey)) {
-            // Respect model if passed, otherwise default via generateAiImage or custom logic
-            if (model && model !== 'dall-e-3' && model !== 'dalle') {
-                // Custom OpenAI call to support different models if needed
-                const imageConfig = {
-                    model: model,
-                    prompt: prompt,
-                    n: 1,
-                    size: '1024x1024',
-                    quality: "standard",
-                    style: "vivid"
-                };
-                const response = await axios.post('https://api.openai.com/v1/images/generations', imageConfig, {
-                    headers: {
-                        'Authorization': `Bearer ${config.openai.apiKey}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                imageUrl = response.data.data[0].url;
-            } else {
-                imageUrl = await generateAiImage(prompt, config);
-            }
-        } else {
-            // Stock providers
-            imageUrl = await fetchMediaForStream(provider, prompt, config);
-        }
-
-        if (imageUrl) {
-            res.json({ success: true, imageUrl });
-        } else {
-            throw new Error("Failed to generate/fetch image");
-        }
-
-    } catch (error) {
-        console.error('Test Image Generation Error:', error.message);
-        if (error.response) {
-            console.error('API Error Response:', error.response.data);
-            if (error.response.data && error.response.data.errors) {
-                return res.status(500).json({ success: false, message: JSON.stringify(error.response.data.errors) });
-            }
-        }
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
 // Detect available OpenAI models
 app.get('/api/detect-models', requireAuth, async (req, res) => {
     try {
@@ -2322,17 +2120,9 @@ async function fetchMediaForStream(provider, query, config) {
 }
 
 // Separate AI Gen Helper to be called by fetchMediaForStream
-async function generateAiImage(query, config, overridePrompt = null) {
-    // Determine provider (check config or default)
-    const provider = config.imageGeneration?.provider || 'dall-e-3';
-    const prompt = overridePrompt || `A high-quality, natural style blog image about: ${query}. 1792x1024 landscape resolution style.`;
-
-    // Runware Support
-    if (provider === 'runware') {
-        return await generateRunwareImage(query, config, prompt);
-    }
-
+async function generateAiImage(query, config) {
     try {
+        const prompt = `A high-quality, natural style blog image about: ${query}. 1792x1024 landscape resolution style.`;
         const response = await axios.post('https://api.openai.com/v1/images/generations', {
             model: "dall-e-3",
             prompt: prompt,
@@ -2346,89 +2136,6 @@ async function generateAiImage(query, config, overridePrompt = null) {
         return response.data?.data?.[0]?.url;
     } catch (e) {
         console.error('AI Gen Error:', e.message);
-        return null;
-    }
-}
-
-// Helper: Runware Image Generation
-async function generateRunwareImage(query, config, prompt) {
-    try {
-        const runwareKey = config.runware?.apiKey || process.env.RUNWARE_API_KEY;
-        if (!runwareKey) {
-            console.error("Runware API Key not configured");
-            return null;
-        }
-
-        let modelId = config.imageGeneration?.model || config.runware?.model || 'runware:100@1'; // default model
-        console.log(`Generating AI image via Runware (${modelId}) for: ${query}`);
-
-        // Handle Dimensions (Strict DALL-E 3 Compliance if using OpenAI model via Runware)
-        let width = 1792;
-        let height = 1024;
-
-        // If user requests specific size, try to respect it but ensure multiple of 64 or safe sizes
-        if (config.imageGeneration?.size) {
-            const parts = config.imageGeneration.size.split('x');
-            if (parts.length === 2) {
-                width = parseInt(parts[0]);
-                height = parseInt(parts[1]);
-            }
-        }
-
-        // Special handling for DALL-E 3 (openai:4@1) which requires specific sizes
-        // or if using SDXL models, they prefer multiples of 64.
-        // It's safer to snap to nearest valid DALL-E size if openai model is detected.
-        if (modelId.includes('openai')) {
-            // Map to closest DALL-E 3 landscape
-            width = 1792;
-            height = 1024;
-            console.log(`Enforcing DALL-E 3 safe resolution: ${width}x${height} for model ${modelId}`);
-        } else {
-            // Ensure multiples of 64 for minimal safety with other models
-            width = Math.floor(width / 64) * 64;
-            height = Math.floor(height / 64) * 64;
-        }
-
-        const runwarePayload = [
-            {
-                "taskType": "authentication",
-                "apiKey": runwareKey
-            },
-            {
-                "taskType": "imageInference",
-                "taskUUID": crypto.randomUUID(),
-                "positivePrompt": prompt,
-                "modelId": modelId,
-                "height": height,
-                "width": width,
-                "numberResults": 1
-            }
-        ];
-
-        const response = await axios.post('https://api.runware.ai/v1', runwarePayload, {
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (response.data && response.data.data) {
-            const infResult = response.data.data.find(t => t.taskType === 'imageInference');
-            if (infResult && infResult.imageURL) {
-                return infResult.imageURL;
-            } else if (infResult && infResult.error) {
-                console.error('Runware Inference Error:', infResult.error);
-            }
-        }
-
-        if (response.data && response.data.error) { // Check top-level error
-            console.error('Runware API Error:', response.data);
-        }
-
-        console.error('Runware Response Error (No Image):', JSON.stringify(response.data));
-        return null;
-    } catch (e) {
-        console.error('AI Gen Error (Runware):', e.message);
-        if (e.response && e.response.data) {
-            console.error('Runware 400 Detail:', JSON.stringify(e.response.data));
-        }
         return null;
     }
 }
@@ -2451,25 +2158,6 @@ async function fetchYouTubeVideo(query, config) {
     return null;
 }
 
-// Trigger Automation Task Instantly
-app.post('/api/automation/trigger-now', requireAuth, async (req, res) => {
-    try {
-        console.log('Received instant automation trigger...');
-
-        // Check if automation is running
-        if (isAutomationRunning) {
-            return res.status(409).json({ success: false, message: 'Automation is already running. Please wait.' });
-        }
-
-        // Run async (don't wait for completion)
-        runSingleAutomationTask();
-
-        res.json({ success: true, message: 'Automation task started in background!' });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
 // Publish Article Endpoint
 app.post('/api/publish-article', async (req, res) => {
     const { title, content, status, featuredImageUrl } = req.body;
@@ -2489,30 +2177,8 @@ app.post('/api/publish-article', async (req, res) => {
             try {
                 console.log('Uploading featured image:', featuredImageUrl);
                 const imageResponse = await axios.get(featuredImageUrl, { responseType: 'arraybuffer' });
-                let imageBuffer = Buffer.from(imageResponse.data, 'binary');
+                const imageBuffer = Buffer.from(imageResponse.data, 'binary');
                 const filename = `featured-image-${Date.now()}.jpg`;
-
-                // RESIZE LOGIC
-                if (config.imageGeneration?.size) {
-                    try {
-                        const parts = config.imageGeneration.size.split('x');
-                        if (parts.length === 2) {
-                            const width = parseInt(parts[0]);
-                            const height = parseInt(parts[1]);
-
-                            console.log(`Resizing featured image to ${width}x${height} before upload...`);
-                            imageBuffer = await sharp(imageBuffer)
-                                .resize(width, height, {
-                                    fit: 'cover',
-                                    position: 'center'
-                                })
-                                .toBuffer();
-                        }
-                    } catch (resizeError) {
-                        console.error('Failed to resize image:', resizeError.message);
-                        // Continue with original buffer
-                    }
-                }
 
                 const mediaResponse = await axios.post(`${wpUrl}/wp-json/wp/v2/media`, imageBuffer, {
                     headers: {

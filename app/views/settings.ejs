@@ -24,6 +24,8 @@
                     <button class="tab-btn" data-tab="tab-seo">SEO Config</button>
                     <button class="tab-btn" data-tab="tab-ai">AI Settings</button>
                     <button class="tab-btn" data-tab="tab-api">API Keys</button>
+                    <button class="tab-btn" data-tab="tab-test-image">Test Image</button>
+                    <button class="tab-btn" data-tab="tab-logs">System Logs</button>
                     <button class="tab-btn" data-tab="tab-general">WordPress Configuration</button>
                 </div>
 
@@ -87,6 +89,16 @@
                                             target="_blank">OpenAI Platform</a></small>
                                 </div>
 
+                                <div class="form-group"
+                                    style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                                    <label for="runwareApiKey">Runware API Key</label>
+                                    <input type="password" id="runwareApiKey" name="runwareApiKey"
+                                        value="<%= config.runware ? config.runware.apiKey : '' %>"
+                                        placeholder="Enter Runware API Key">
+                                    <small>Required if using Runware.ai for image generation. Get key from <a
+                                            href="https://runware.ai/" target="_blank">Runware Dashboard</a>.</small>
+                                </div>
+
                                 <div class="form-actions">
                                     <button type="button" class="btn btn-secondary" onclick="detectModels()">
                                         Detect Available Models
@@ -122,23 +134,133 @@
 
                                 <div class="form-group">
                                     <label for="imageModel">Image Generation Model</label>
-                                    <select id="imageModel" name="imageModel">
-                                        <option value="gpt-image-1.5" <%=config.openai.imageModel==='gpt-image-1.5'
-                                            ? 'selected' : '' %>>GPT-Image-1.5 (Latest & Best) ⭐</option>
-                                        <option value="gpt-image-1" <%=config.openai.imageModel==='gpt-image-1'
-                                            ? 'selected' : '' %>>GPT-Image-1 (High Fidelity)</option>
-                                        <option value="gpt-image-1-mini"
-                                            <%=config.openai.imageModel==='gpt-image-1-mini' ? 'selected' : '' %>
-                                            >GPT-Image-1-Mini (Cost-Efficient)</option>
-                                        <option value="chatgpt-image-latest"
-                                            <%=config.openai.imageModel==='chatgpt-image-latest' ? 'selected' : '' %>
-                                            >ChatGPT Image Latest</option>
-                                        <option value="dall-e-3" <%=config.openai.imageModel==='dall-e-3' ? 'selected'
-                                            : '' %>>DALL-E 3 (Deprecated)</option>
-                                        <option value="dall-e-2" <%=config.openai.imageModel==='dall-e-2' ? 'selected'
-                                            : '' %>>DALL-E 2 (Deprecated)</option>
-                                    </select>
-                                    <small>Model used for image generation</small>
+                                    <input type="text" id="imageModel" name="imageModel" list="imageModelList"
+                                        value="<%= config.openai.imageModel %>"
+                                        placeholder="Select or type model ID...">
+                                    <datalist id="imageModelList">
+                                        <!-- OpenAI Models -->
+                                        <option value="dall-e-3">DALL-E 3 - $0.04</option>
+                                        <option value="dall-e-2">DALL-E 2</option>
+                                        <option value="gpt-image-1.5">GPT Image 1.5 - $0.009</option>
+
+                                        <!-- Latest Models (Jan 2026) -->
+                                        <option value="ImagineArt 1.5 Pro">ImagineArt 1.5 Pro - $0.045</option>
+                                        <option value="FLUX.2 [klein] 4B Base">FLUX.2 [klein] 4B Base - $0.0019</option>
+                                        <option value="FLUX.2 [klein] 4B">FLUX.2 [klein] 4B - $0.0006</option>
+                                        <option value="FLUX.2 [klein] 9B Base">FLUX.2 [klein] 9B Base - $0.00416
+                                        </option>
+
+                                        <!-- Qwen Models -->
+                                        <option value="Qwen-Image-2512">Qwen-Image-2512 - $0.0051</option>
+                                        <option value="Qwen-Image-Layered">Qwen-Image-Layered - $0.0141</option>
+                                        <option value="Qwen-Image-Edit-2511">Qwen-Image-Edit-2511 - $0.0122</option>
+                                        <option value="Qwen-Image-Edit">Qwen-Image-Edit - $0.0032</option>
+                                        <option value="Qwen-Image">Qwen-Image - $0.0058</option>
+
+                                        <!-- FLUX Models -->
+                                        <option value="FLUX.2 [max]">FLUX.2 [max] - $0.07</option>
+                                        <option value="FLUX.2 [flex]">FLUX.2 [flex] - $0.06</option>
+                                        <option value="FLUX.2 [dev]">FLUX.2 [dev] - $0.0051</option>
+                                        <option value="FLUX.1 [dev]">FLUX.1 [dev] - $0.0019</option>
+                                        <option value="FLUX.1 [schnell]">FLUX.1 [schnell] - $0.0006</option>
+                                        <option value="FLUX.1 Krea [dev]">FLUX.1 Krea [dev] - $0.0098</option>
+                                        <option value="FLUX.1 Kontext [max]">FLUX.1 Kontext [max] - $0.08</option>
+                                        <option value="FLUX.1 Kontext [pro]">FLUX.1 Kontext [pro] - $0.04</option>
+                                        <option value="FLUX.1 Kontext [dev]">FLUX.1 Kontext [dev] - $0.0105</option>
+
+                                        <!-- Wan Models -->
+                                        <option value="Wan2.6 Image">Wan2.6 Image - $0.03</option>
+                                        <option value="Wan2.5-Preview Image">Wan2.5-Preview Image - $0.027</option>
+
+                                        <!-- Kandinsky & Z-Image -->
+                                        <option value="Kandinsky 5.0 Image Lite">Kandinsky 5.0 Image Lite - $0.0077
+                                        </option>
+                                        <option value="Z-Image-Turbo">Z-Image-Turbo - $0.0013</option>
+
+                                        <!-- Riverflow Models -->
+                                        <option value="Riverflow 2 Preview Fast">Riverflow 2 Preview Fast - $0.02525
+                                        </option>
+                                        <option value="Riverflow 2 Preview Standard">Riverflow 2 Preview Standard -
+                                            $0.02945</option>
+                                        <option value="Riverflow 2 Preview Max">Riverflow 2 Preview Max - $0.06358
+                                        </option>
+                                        <option value="Riverflow 1.1 Pro">Riverflow 1.1 Pro - $0.077</option>
+                                        <option value="Riverflow 1.1 Mini">Riverflow 1.1 Mini - $0.0302</option>
+                                        <option value="Riverflow 1.1">Riverflow 1.1 - $0.039</option>
+
+                                        <!-- Bria Models -->
+                                        <option value="Bria FIBO">Bria FIBO - $0.04</option>
+                                        <option value="Bria 3.2">Bria 3.2 - $0.04</option>
+                                        <option value="Bria Image Increase Resolution">Bria Image Increase Resolution -
+                                            $0.018</option>
+
+                                        <!-- Seedream Models -->
+                                        <option value="Seedream 4.0">Seedream 4.0 - $0.03</option>
+                                        <option value="Seedream 3.0">Seedream 3.0 - $0.018</option>
+                                        <option value="SeedEdit 3.0">SeedEdit 3.0 - $0.03</option>
+
+                                        <!-- Google Imagen Models -->
+                                        <option value="Imagen 4 Ultra">Imagen 4 Ultra - $0.06</option>
+                                        <option value="Imagen 4 Fast">Imagen 4 Fast - $0.02</option>
+                                        <option value="Imagen 4 Preview">Imagen 4 Preview - $0.04</option>
+                                        <option value="Imagen 3">Imagen 3 - $0.04</option>
+                                        <option value="Gemini Flash Image 2.5">Gemini Flash Image 2.5 - $0.039</option>
+
+                                        <!-- Stable Diffusion -->
+                                        <option value="Stable Diffusion 3">Stable Diffusion 3 - $0.0013</option>
+                                        <option value="SD XL v1.0 VAE Fix">SD XL v1.0 VAE Fix - $0.0019</option>
+
+                                        <!-- HiDream Models -->
+                                        <option value="HiDream-I1 Full">HiDream-I1 Full - $0.009</option>
+                                        <option value="HiDream-I1 Dev">HiDream-I1 Dev - $0.0045</option>
+                                        <option value="HiDream-I1 Fast">HiDream-I1 Fast - $0.0038</option>
+
+                                        <!-- Midjourney Models -->
+                                        <option value="Midjourney V7">Midjourney V7 - $0.025</option>
+                                        <option value="Midjourney V6.1">Midjourney V6.1 - $0.025</option>
+                                        <option value="Midjourney V6">Midjourney V6 - $0.025</option>
+
+                                        <!-- Juggernaut Models -->
+                                        <option value="Juggernaut Pro Flux">Juggernaut Pro Flux by RunDiffusion -
+                                            $0.0042</option>
+                                        <option value="Juggernaut Lightning Flux">Juggernaut Lightning Flux - $0.0008
+                                        </option>
+                                        <option value="civitai:133005@782002">Juggernaut XL V9 - $0.0042</option>
+
+                                        <!-- Video Models -->
+                                        <option value="KlingAI 2.1 Master">KlingAI 2.1 Master (Video) - $0.924</option>
+                                        <option value="KlingAI 2.0 Master">KlingAI 2.0 Master (Video) - $0.924</option>
+                                        <option value="PixVerse v4.5">PixVerse v4.5 (Video) - $0.299</option>
+                                        <option value="Vidu Q1">Vidu Q1 (Video) - $0.22</option>
+
+                                        <!-- Other Popular Models -->
+                                        <option value="Nano Banana Pro">Nano Banana Pro - $0.138</option>
+                                        <option value="Ideogram 2.0">Ideogram 2.0 - $0.08</option>
+                                        <option value="ToonYou Beta 6">ToonYou Beta 6 - $0.0006</option>
+
+                                        <!-- Legacy Runware/CivitAI IDs -->
+                                        <option value="openai:4@1">Runware ChatGPT Model (Nano Banana)</option>
+                                        <option value="runware:100@1">Runware: Realism (Default)</option>
+                                        <option value="runware:101@1">Runware: Photorealism</option>
+                                        <option value="civitai:4201@130072">Realistic Vision V6.0 B1</option>
+                                        <option value="civitai:4384@128713">DreamShaper 8</option>
+                                        <option value="civitai:101055@128078">SDXL Unstable Diffusers YamerMIX</option>
+                                        <option value="civitai:82098@128713">AbsoluteReality v1.8.1</option>
+                                        <option value="civitai:29460@128713">GhostMix V2.0</option>
+                                        <option value="civitai:120791@128713">Deliberate V3</option>
+                                        <option value="civitai:61372@128713">Rev Animated V1.2.2</option>
+                                        <option value="civitai:93931@128713">EpicRealism</option>
+                                        <option value="civitai:81458@128078">RealVisXL V4.0</option>
+                                        <option value="civitai:112902@128078">Copax TimelessXL</option>
+                                        <option value="civitai:20155@128713">MagicMix Realistic V6</option>
+                                        <option value="civitai:25685@128713">MeinaMix V11</option>
+                                        <option value="civitai:90354@128078">AlbedoBase XL</option>
+                                        <option value="civitai:4823@128713">Anything V5</option>
+                                        <option value="civitai:64094@128713">CyberRealistic V4.1</option>
+                                        <option value="civitai:79290@128713">A-Zovya Photoreal</option>
+                                        <option value="civitai:31253@128713">MajicMIX Realistic</option>
+                                    </datalist>
+                                    <small>Select a preset or type a specific Model ID (e.g., Runware ID).</small>
                                 </div>
 
                                 <div class="model-info"
@@ -161,513 +283,622 @@
                             </form>
                         </div>
                     </div>
-
                 </div>
 
-                <div id="tab-image" class="tab-content">
+                <div id="tab-test-image" class="tab-content">
                     <div class="card">
                         <div class="card-header">
-                            <h2>Image Generation Settings</h2>
+                            <h2>Test Image Generation</h2>
                         </div>
                         <div class="card-body">
-                            <form id="imageSettingsForm">
-                                <h3 style="margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">Featured
-                                    Image</h3>
+                            <form id="testImageForm">
                                 <div class="form-group">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" id="imageFeaturedEnabled"
-                                            <%=config.imageGeneration.featuredEnabled ? 'checked' : '' %>>
-                                        <span class="toggle-switch"></span>
-                                        <span>Enable Featured Image</span>
-                                    </label>
-                                    <small>Generates a main image for the article header</small>
-                                </div>
-
-                                <h3
-                                    style="margin-top: 1.5rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
-                                    Inline Images</h3>
-                                <div class="form-group">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" id="imageInlineEnabled"
-                                            <%=config.imageGeneration.inlineEnabled ? 'checked' : '' %>>
-                                        <span class="toggle-switch"></span>
-                                        <span>Enable Inline Images</span>
-                                    </label>
-                                    <small>Generates images inside the article content</small>
-                                </div>
-
-                                <div class="form-group" id="inlineFrequencyGroup"
-                                    style="display: <%= config.imageGeneration.inlineEnabled ? 'block' : 'none' %>;">
-                                    <label for="imageInlineFrequency">Inline Image Frequency</label>
-                                    <select id="imageInlineFrequency" name="imageInlineFrequency">
-                                        <option value="1" <%=config.imageGeneration.inlineFrequency===1 ? 'selected'
-                                            : '' %>>After Every Heading</option>
-                                        <option value="2" <%=config.imageGeneration.inlineFrequency===2 ? 'selected'
-                                            : '' %>>After Every 2nd Heading</option>
-                                        <option value="3" <%=config.imageGeneration.inlineFrequency===3 ? 'selected'
-                                            : '' %>>After Every 3rd Heading</option>
-                                    </select>
-                                </div>
-
-                                <h3
-                                    style="margin-top: 1.5rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
-                                    YouTube Embeds</h3>
-                                <div class="form-group">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" id="youtubeEnabled" <%=config.youtube.enabled ? 'checked'
-                                            : '' %>>
-                                        <span class="toggle-switch"></span>
-                                        <span>Enable YouTube Video Embeds</span>
-                                    </label>
-                                </div>
-
-                                <div id="youtubeSettings"
-                                    style="display: <%= config.youtube.enabled ? 'block' : 'none' %>;">
-                                    <div class="form-group">
-                                        <label for="youtubeFrequency">Embed Frequency</label>
-                                        <select id="youtubeFrequency" name="youtubeFrequency">
-                                            <option value="2" <%=config.youtube.frequency===2 ? 'selected' : '' %>>After
-                                                Every 2nd Heading</option>
-                                            <option value="3" <%=config.youtube.frequency===3 ? 'selected' : '' %>>After
-                                                Every 3rd Heading</option>
-                                            <option value="5" <%=config.youtube.frequency===5 ? 'selected' : '' %>>After
-                                                Every 5th Heading</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label for="imageSize">Image Size</label>
-                                    <select id="imageSize" name="imageSize">
-                                        <option value="1200x628" <%=config.imageGeneration.size==='1200x628'
-                                            ? 'selected' : '' %>>1200x628 (WordPress Featured - Recommended) ⭐</option>
-                                        <option value="1200x900" <%=config.imageGeneration.size==='1200x900'
-                                            ? 'selected' : '' %>>1200x900 (4:3 Ratio)</option>
-                                        <option value="1024x1024" <%=config.imageGeneration.size==='1024x1024'
-                                            ? 'selected' : '' %>>1024x1024 (Square - Social Media)</option>
-                                        <option value="1792x1024" <%=config.imageGeneration.size==='1792x1024'
-                                            ? 'selected' : '' %>>1792x1024 (Wide Landscape)</option>
-                                        <option value="1024x1792" <%=config.imageGeneration.size==='1024x1792'
-                                            ? 'selected' : '' %>>1024x1792 (Portrait)</option>
-                                    </select>
-                                    <small>WordPress recommended: 1200x628 pixels for featured images and social
-                                        sharing</small>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="imageQuality">Image Quality</label>
-                                    <select id="imageQuality" name="imageQuality">
-                                        <option value="standard" <%=config.imageGeneration.quality==='standard'
-                                            ? 'selected' : '' %>>Standard (Faster, Lower Cost)</option>
-                                        <option value="hd" <%=config.imageGeneration.quality==='hd' ? 'selected' : '' %>
-                                            >HD
-                                            (Higher Quality, Higher Cost)</option>
-                                    </select>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="imageStyle">Image Style</label>
-                                    <select id="imageStyle" name="imageStyle">
-                                        <option value="vivid" <%=config.imageGeneration.style==='vivid' ? 'selected'
-                                            : '' %>
-                                            >Vivid (Hyper-real, Dramatic)</option>
-                                        <option value="natural" <%=config.imageGeneration.style==='natural' ? 'selected'
-                                            : '' %>>Natural (More Natural, Less Hyper-real)</option>
-                                    </select>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="imageProvider">Image Provider</label>
-                                    <select id="imageProvider" name="imageProvider">
+                                    <label for="testImageProvider">Provider</label>
+                                    <select id="testImageProvider" name="provider">
                                         <optgroup label="AI Image Generation">
-                                            <option value="gpt-image-1.5"
-                                                <%=config.imageGeneration.provider==='gpt-image-1.5' ? 'selected' : ''
-                                                %>>GPT-Image-1.5 (Latest & Best) ⭐</option>
-                                            <option value="gpt-image-1"
-                                                <%=config.imageGeneration.provider==='gpt-image-1' ? 'selected' : '' %>
-                                                >GPT-Image-1 (High Fidelity)</option>
-                                            <option value="gpt-image-1-mini"
-                                                <%=config.imageGeneration.provider==='gpt-image-1-mini' ? 'selected'
-                                                : '' %>>GPT-Image-1-Mini (Cost-Efficient)</option>
-                                            <option value="chatgpt-image-latest"
-                                                <%=config.imageGeneration.provider==='chatgpt-image-latest' ? 'selected'
-                                                : '' %>>ChatGPT Image Latest</option>
-                                            <option value="dall-e-3" <%=config.imageGeneration.provider==='dall-e-3' ||
-                                                config.imageGeneration.provider==='dalle' ? 'selected' : '' %>>DALL-E 3
-                                                (Deprecated)</option>
-                                            <option value="dall-e-2" <%=config.imageGeneration.provider==='dall-e-2'
-                                                ? 'selected' : '' %>>DALL-E 2 (Deprecated)</option>
+                                            <option value="gpt-image-1.5">GPT-Image-1.5 (Latest)</option>
+                                            <option value="dall-e-3">DALL-E 3</option>
+                                            <option value="runware">Runware.ai</option>
                                         </optgroup>
                                         <optgroup label="Stock Photos">
-                                            <option value="unsplash" <%=config.imageGeneration.provider==='unsplash'
-                                                ? 'selected' : '' %>>Unsplash</option>
-                                            <option value="pexels" <%=config.imageGeneration.provider==='pexels'
-                                                ? 'selected' : '' %>>Pexels</option>
-                                            <option value="pixabay" <%=config.imageGeneration.provider==='pixabay'
-                                                ? 'selected' : '' %>>Pixabay</option>
+                                            <option value="unsplash">Unsplash</option>
+                                            <option value="pexels">Pexels</option>
+                                            <option value="pixabay">Pixabay</option>
+                                            <option value="google">Google Search</option>
                                         </optgroup>
                                     </select>
-                                    <small>Choose AI model or stock photo source for image generation</small>
                                 </div>
 
-
-
-                                <div class="form-actions">
-                                    <button type="submit" class="btn btn-primary">Save Image Settings</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-
-                </div>
-
-                <div id="tab-keywords" class="tab-content">
-                    <div class="card">
-                        <div class="card-header">
-                            <h2>Keywords Configuration</h2>
-                        </div>
-                        <div class="card-body">
-                            <form id="keywordsForm">
-                                <div class="form-group">
-                                    <label for="defaultKeywords">Bulk Keywords (comma-separated)</label>
-                                    <textarea id="defaultKeywords" name="defaultKeywords" rows="10"
-                                        placeholder="technology, innovation, AI, machine learning, cloud computing"><%= config.content.defaultKeywords %></textarea>
-                                    <small>Keywords used for topic generation and auto-tagging.</small>
-                                </div>
-                                <div class="form-actions">
-                                    <button type="submit" class="btn btn-primary">Save Keywords</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="tab-prompts" class="tab-content">
-                    <div class="card">
-                        <div class="card-header">
-                            <h2>Instructions & Prompts</h2>
-                        </div>
-                        <div class="card-body">
-                            <form id="promptsForm">
-                                <div class="form-group">
-                                    <label for="customPrompt">Custom Article Prompt (Global)</label>
-                                    <textarea id="customPrompt" name="customPrompt" rows="4"
-                                        placeholder="Write in a professional tone..."><%= config.content.customPrompt %></textarea>
-                                    <small>System prompt appended to all article requests.</small>
+                                <div class="form-group" id="testImageModelGroup">
+                                    <label for="testImageModel">Model ID (For Runware/AI)</label>
+                                    <input type="text" id="testImageModel" name="model" list="imageModelList"
+                                        placeholder="Select or type model ID..." value="runware:100@1">
+                                    <small>Leave blank to use default settings.</small>
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="articleInstructions">Article Writing Instructions</label>
-                                    <textarea id="articleInstructions" name="articleInstructions" rows="4"
-                                        placeholder="Write in first person, use conversational tone..."><%= config.content.articleInstructions %></textarea>
-                                    <small>Specific style guidelines for the AI.</small>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="imageCustomPrompt">Custom Image Prompt (Global)</label>
-                                    <textarea id="imageCustomPrompt" name="imageCustomPrompt" rows="3"
-                                        placeholder="Photorealistic, cinematic lighting..."><%= config.content.imageCustomPrompt %></textarea>
-                                    <small>Additional context for image generation prompts.</small>
-                                </div>
-
-                                <h3
-                                    style="margin-top: 1.5rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
-                                    Article Settings</h3>
-                                <div class="form-group">
-                                    <label for="articleLength">Article Length (words)</label>
-                                    <select id="articleLength" name="articleLength">
-                                        <option value="500-800" <%=config.content.articleLength==='500-800' ? 'selected'
-                                            : '' %>>Short (500-800 words)</option>
-                                        <option value="1000-1500" <%=config.content.articleLength==='1000-1500'
-                                            ? 'selected' : '' %>>Medium (1000-1500 words)</option>
-                                        <option value="2000-2500" <%=config.content.articleLength==='2000-2500'
-                                            ? 'selected' : '' %>>Long (2000-2500 words)</option>
-                                        <option value="3000+" <%=config.content.articleLength==='3000+' ? 'selected'
-                                            : '' %>>Very Long (3000+ words)</option>
-                                    </select>
-                                    <small>Target word count for generated articles.</small>
-                                </div>
-
-                                <h3
-                                    style="margin-top: 1.5rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
-                                    Call to Action</h3>
-                                <div class="form-group">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" id="includeCallToAction"
-                                            <%=config.content.includeCallToAction ? 'checked' : '' %>>
-                                        <span class="toggle-switch"></span>
-                                        <span>Include Call to Action at End of Article</span>
-                                    </label>
-                                    <small>Adds a CTA button/link at the end of every article.</small>
-                                </div>
-                                <div class="form-group">
-                                    <label for="callToActionText">CTA Button Text</label>
-                                    <input type="text" id="callToActionText" name="callToActionText"
-                                        value="<%= config.content.callToActionText %>" placeholder="Learn more">
-                                </div>
-                                <div class="form-group">
-                                    <label for="callToActionUrl">CTA Button URL</label>
-                                    <input type="url" id="callToActionUrl" name="callToActionUrl"
-                                        value="<%= config.content.callToActionUrl %>"
-                                        placeholder="https://yourwebsite.com/contact">
+                                    <label for="testImagePrompt">Image Prompt</label>
+                                    <textarea id="testImagePrompt" name="prompt" rows="3"
+                                        placeholder="Describe the image you want to generate..."
+                                        required>Modern luxury home exterior with large glass windows, sunset lighting, photorealistic, 8k</textarea>
                                 </div>
 
                                 <div class="form-actions">
-                                    <button type="submit" class="btn btn-primary">Save Prompts</button>
+                                    <button type="submit" class="btn btn-primary" id="testImageBtn">
+                                        Generate Test Image
+                                    </button>
                                 </div>
                             </form>
+
+                            <div id="testImageResult"
+                                style="margin-top: 2rem; display: none; text-align: center; background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md);">
+                                <h4 style="margin-bottom: 1rem;">Generated Result:</h4>
+                                <div id="testImageLoading" style="display: none; color: var(--text-muted);">
+                                    <span class="spinner-border spinner-border-sm"></span> Generating...
+                                </div>
+                                <img id="testImagePreview" src="" alt="Generated Preview"
+                                    style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                <div id="testImageError"
+                                    style="color: var(--danger); margin-top: 0.5rem; display: none;">
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="tab-seo" class="tab-content">
-                    <div class="card">
-                        <div class="card-header">
-                            <h2>SEO & Structure Settings</h2>
-                        </div>
-                        <div class="card-body">
-                            <form id="seoForm">
-                                <div class="form-group">
-                                    <label for="imagesPerPost">Images Per Post</label>
-                                    <input type="number" id="imagesPerPost" name="imagesPerPost" min="0" max="10"
-                                        value="<%= config.content.imagesPerPost %>">
-                                    <small>Target number of images (approximate).</small>
-                                </div>
-
-                                <h3 style="margin-top: 1.5rem; color: var(--primary-light);">Internal Linking</h3>
-                                <div class="form-group">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" id="includeInternalLinks"
-                                            <%=config.content.includeInternalLinks ? 'checked' : '' %>>
-                                        <span class="toggle-switch"></span>
-                                        <span>Include Internal Links</span>
-                                    </label>
-                                </div>
-                                <div class="form-group">
-                                    <label for="internalLinksCount">Number of Internal Links</label>
-                                    <input type="number" id="internalLinksCount" name="internalLinksCount" min="0"
-                                        max="10" value="<%= config.content.internalLinksCount %>">
-                                </div>
-
-                                <h3 style="margin-top: 1.5rem; color: var(--primary-light);">Read Also Section</h3>
-                                <div class="form-group">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" id="includeReadAlso" <%=config.content.includeReadAlso
-                                            ? 'checked' : '' %>>
-                                        <span class="toggle-switch"></span>
-                                        <span>Include "Read Also" Section</span>
-                                    </label>
-                                </div>
-                                <div class="form-group">
-                                    <label for="readAlsoCount">Number of Links</label>
-                                    <input type="number" id="readAlsoCount" name="readAlsoCount" min="0" max="10"
-                                        value="<%= config.content.readAlsoCount %>">
-                                </div>
-
-
-                                <h3 style="margin-top: 1.5rem; color: var(--primary-light);">Outbound Links</h3>
-                                <div class="form-group">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" id="includeOutboundLinks"
-                                            <%=config.content.includeOutboundLinks ? 'checked' : '' %>>
-                                        <span class="toggle-switch"></span>
-                                        <span>Include Outbound/Reference Links</span>
-                                    </label>
-                                </div>
-                                <div class="form-group">
-                                    <label for="outboundLinksCount">Number of Outbound Links</label>
-                                    <input type="number" id="outboundLinksCount" name="outboundLinksCount" min="0"
-                                        max="10" value="<%= config.content.outboundLinksCount %>">
-                                </div>
-
-                                <div class="form-actions">
-                                    <button type="submit" class="btn btn-primary">Save SEO Settings</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="tab-api" class="tab-content">
-                    <div class="card">
-                        <div class="card-header">
-                            <h2>API Keys Configuration</h2>
-                        </div>
-                        <div class="card-body">
-                            <form id="apiKeysForm">
-                                <h3 style="margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">Editor
-                                    Configuration</h3>
-                                <div class="form-group">
-                                    <label for="tinymceApiKey">TinyMCE API Key</label>
-                                    <input type="password" id="tinymceApiKey" name="tinymceApiKey"
-                                        value="<%= config.tinymce ? config.tinymce.apiKey : '' %>"
-                                        placeholder="Enter TinyMCE API Key">
-                                    <small>Required to remove the "API Key Required" warning. Get a free key from <a
-                                            href="https://www.tiny.cloud/my-account/dashboard/" target="_blank">Tiny
-                                            Cloud</a>.</small>
-                                </div>
-
-                                <h3
-                                    style="margin-top: 2rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
-                                    YouTube API</h3>
-                                <div class="form-group">
-                                    <label for="youtubeApiKey">YouTube Data API Key</label>
-                                    <div style="display: flex; gap: 0.5rem;">
-                                        <input type="password" id="youtubeApiKey" name="youtubeApiKey"
-                                            value="<%= config.youtube.apiKey %>" placeholder="Enter YouTube API Key"
-                                            style="flex: 1;">
-                                        <button type="button" class="btn btn-secondary" onclick="testYouTube()"
-                                            style="white-space: nowrap;">Test Connection</button>
-                                    </div>
-                                    <small>Required for video search and embedding. Get it from <a
-                                            href="https://console.cloud.google.com/" target="_blank">Google Cloud
-                                            Console</a></small>
-                                </div>
-
-                                <h3
-                                    style="margin-top: 2rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
-                                    Stock Image APIs</h3>
-                                <div class="form-group">
-                                    <label for="unsplashApiKey">Unsplash Access Key</label>
-                                    <div style="display: flex; gap: 0.5rem;">
-                                        <input type="password" id="unsplashApiKey" name="unsplashApiKey"
-                                            value="<%= config.stockImages.unsplashApiKey %>"
-                                            placeholder="Enter Unsplash Access Key" style="flex: 1;">
-                                        <button type="button" class="btn btn-secondary" onclick="testUnsplash()"
-                                            style="white-space: nowrap;">Test Connection</button>
-                                    </div>
-                                    <small>Get your key from <a href="https://unsplash.com/developers"
-                                            target="_blank">Unsplash Developers</a></small>
-                                </div>
-                                <div class="form-group">
-                                    <label for="pexelsApiKey">Pexels API Key</label>
-                                    <div style="display: flex; gap: 0.5rem;">
-                                        <input type="password" id="pexelsApiKey" name="pexelsApiKey"
-                                            value="<%= config.stockImages.pexelsApiKey %>"
-                                            placeholder="Enter Pexels API Key" style="flex: 1;">
-                                        <button type="button" class="btn btn-secondary" onclick="testPexels()"
-                                            style="white-space: nowrap;">Test Connection</button>
-                                    </div>
-                                    <small>Get your key from <a href="https://www.pexels.com/api/"
-                                            target="_blank">Pexels API</a></small>
-                                </div>
-                                <div class="form-group">
-                                    <label for="pixabayApiKey">Pixabay API Key</label>
-                                    <div style="display: flex; gap: 0.5rem;">
-                                        <input type="password" id="pixabayApiKey" name="pixabayApiKey"
-                                            value="<%= config.stockImages.pixabayApiKey %>"
-                                            placeholder="Enter Pixabay API Key" style="flex: 1;">
-                                        <button type="button" class="btn btn-secondary" onclick="testPixabay()"
-                                            style="white-space: nowrap;">Test Connection</button>
-                                    </div>
-                                    <small>Get your key from <a href="https://pixabay.com/api/docs/"
-                                            target="_blank">Pixabay API</a></small>
-                                </div>
-
-                                <div class="form-actions">
-                                    <button type="submit" class="btn btn-primary">Save API Keys</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="tab-automation" class="tab-content active">
-                    <div class="card">
-                        <div class="card-header">
-                            <h2>Automation Settings</h2>
-                        </div>
-                        <div class="card-body">
-                            <form id="automationSettingsForm">
-                                <div class="form-group">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" id="automationEnabled" <%=config.automation.enabled
-                                            ? 'checked' : '' %>>
-                                        <span class="toggle-switch"></span>
-                                        <span>Enable Automatic Publishing</span>
-                                    </label>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="schedule">Publishing Schedule</label>
-                                    <select id="schedule" name="schedule" onchange="toggleScheduleOptions()">
-                                        <option value="minutes" <%=config.automation.schedule==='minutes' ? 'selected'
-                                            : '' %>>Every X Minutes</option>
-                                        <option value="hourly" <%=config.automation.schedule==='hourly' ? 'selected'
-                                            : '' %>>Hourly</option>
-                                        <option value="daily" <%=config.automation.schedule==='daily' ? 'selected' : ''
-                                            %>>Daily</option>
-                                        <option value="weekly" <%=config.automation.schedule==='weekly' ? 'selected'
-                                            : '' %>>Weekly</option>
-                                        <option value="cron" <%=config.automation.schedule==='cron' ? 'selected' : '' %>
-                                            >Custom Cron Schedule</option>
-                                    </select>
-                                </div>
-
-                                <div class="form-group" id="minutesGroup"
-                                    style="display: <%= config.automation.schedule === 'minutes' ? 'block' : 'none' %>;">
-                                    <label for="minutesInterval">Publish Every (Minutes)</label>
-                                    <select id="minutesInterval" name="minutesInterval">
-                                        <option value="1" <%=config.automation.minutesInterval===1 ? 'selected' : '' %>
-                                            >Every 1 Minute</option>
-                                        <option value="5" <%=config.automation.minutesInterval===5 ? 'selected' : '' %>
-                                            >Every 5 Minutes</option>
-                                        <option value="10" <%=config.automation.minutesInterval===10 ? 'selected' : ''
-                                            %>>Every 10 Minutes</option>
-                                        <option value="15" <%=config.automation.minutesInterval===15 ? 'selected' : ''
-                                            %>>Every 15 Minutes</option>
-                                        <option value="30" <%=config.automation.minutesInterval===30 ? 'selected' : ''
-                                            %>>Every 30 Minutes</option>
-                                    </select>
-                                    <small>Articles will be published at regular minute intervals</small>
-                                </div>
-
-                                <div class="form-group" id="cronGroup"
-                                    style="display: <%= config.automation.schedule === 'cron' ? 'block' : 'none' %>;">
-                                    <label for="cronExpression">Cron Expression</label>
-                                    <input type="text" id="cronExpression" name="cronExpression"
-                                        value="<%= config.automation.cronExpression || '0 9 * * *' %>"
-                                        placeholder="e.g. 0 9 * * *">
-                                    <small>Standard cron syntax. <a href="https://crontab.guru/" target="_blank">Need
-                                            help?</a></small>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="dailyArticleLimit">Daily Article Limit</label>
-                                    <input type="number" id="dailyArticleLimit" name="dailyArticleLimit" min="1"
-                                        max="100" value="<%= config.automation.dailyArticleLimit %>">
-                                    <small>Maximum number of articles to publish per day</small>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" id="autoCreateCategories"
-                                            <%=config.automation.autoCreateCategories ? 'checked' : '' %>>
-                                        <span class="toggle-switch"></span>
-                                        <span>Auto-Create Categories</span>
-                                    </label>
-                                    <small>Automatically create WordPress categories if they don't exist</small>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" id="autoCreateTags" <%=config.automation.autoCreateTags
-                                            ? 'checked' : '' %>>
-                                        <span class="toggle-switch"></span>
-                                        <span>Auto-Create Tags</span>
-                                    </label>
-                                    <small>Automatically create WordPress tags if they don't exist</small>
-                                </div>
-
-                                <div class="form-actions">
-                                    <button type="submit" class="btn btn-primary">Save Automation Settings</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="notification" class="notification" style="display: none;"></div>
             </div>
+
+            <div id="tab-image" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Image Generation Settings</h2>
+                    </div>
+                    <div class="card-body">
+                        <form id="imageSettingsForm">
+                            <h3 style="margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">Featured
+                                Image</h3>
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="imageFeaturedEnabled"
+                                        <%=config.imageGeneration.featuredEnabled ? 'checked' : '' %>>
+                                    <span class="toggle-switch"></span>
+                                    <span>Enable Featured Image</span>
+                                </label>
+                                <small>Generates a main image for the article header</small>
+                            </div>
+
+                            <h3
+                                style="margin-top: 1.5rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
+                                Inline Images</h3>
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="imageInlineEnabled"
+                                        <%=config.imageGeneration.inlineEnabled ? 'checked' : '' %>>
+                                    <span class="toggle-switch"></span>
+                                    <span>Enable Inline Images</span>
+                                </label>
+                                <small>Generates images inside the article content</small>
+                            </div>
+
+                            <div class="form-group" id="inlineFrequencyGroup"
+                                style="display: <%= config.imageGeneration.inlineEnabled ? 'block' : 'none' %>;">
+                                <label for="imageInlineFrequency">Inline Image Frequency</label>
+                                <select id="imageInlineFrequency" name="imageInlineFrequency">
+                                    <option value="1" <%=config.imageGeneration.inlineFrequency===1 ? 'selected' : '' %>
+                                        >After Every Heading</option>
+                                    <option value="2" <%=config.imageGeneration.inlineFrequency===2 ? 'selected' : '' %>
+                                        >After Every 2nd Heading</option>
+                                    <option value="3" <%=config.imageGeneration.inlineFrequency===3 ? 'selected' : '' %>
+                                        >After Every 3rd Heading</option>
+                                </select>
+                            </div>
+
+                            <h3
+                                style="margin-top: 1.5rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
+                                YouTube Embeds</h3>
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="youtubeEnabled" <%=config.youtube.enabled ? 'checked'
+                                        : '' %>>
+                                    <span class="toggle-switch"></span>
+                                    <span>Enable YouTube Video Embeds</span>
+                                </label>
+                            </div>
+
+                            <div id="youtubeSettings"
+                                style="display: <%= config.youtube.enabled ? 'block' : 'none' %>;">
+                                <div class="form-group">
+                                    <label for="youtubeFrequency">Embed Frequency</label>
+                                    <select id="youtubeFrequency" name="youtubeFrequency">
+                                        <option value="2" <%=config.youtube.frequency===2 ? 'selected' : '' %>>After
+                                            Every 2nd Heading</option>
+                                        <option value="3" <%=config.youtube.frequency===3 ? 'selected' : '' %>>After
+                                            Every 3rd Heading</option>
+                                        <option value="5" <%=config.youtube.frequency===5 ? 'selected' : '' %>>After
+                                            Every 5th Heading</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="imageSize">Image Size</label>
+                                <select id="imageSize" name="imageSize">
+                                    <option value="1200x628" <%=config.imageGeneration.size==='1200x628' ? 'selected'
+                                        : '' %>>1200x628 (WordPress Featured - Recommended) ⭐</option>
+                                    <option value="1200x900" <%=config.imageGeneration.size==='1200x900' ? 'selected'
+                                        : '' %>>1200x900 (4:3 Ratio)</option>
+                                    <option value="1024x1024" <%=config.imageGeneration.size==='1024x1024' ? 'selected'
+                                        : '' %>>1024x1024 (Square - Social Media)</option>
+                                    <option value="1792x1024" <%=config.imageGeneration.size==='1792x1024' ? 'selected'
+                                        : '' %>>1792x1024 (Wide Landscape)</option>
+                                    <option value="1024x1792" <%=config.imageGeneration.size==='1024x1792' ? 'selected'
+                                        : '' %>>1024x1792 (Portrait)</option>
+                                </select>
+                                <small>WordPress recommended: 1200x628 pixels for featured images and social
+                                    sharing</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="imageQuality">Image Quality</label>
+                                <select id="imageQuality" name="imageQuality">
+                                    <option value="standard" <%=config.imageGeneration.quality==='standard' ? 'selected'
+                                        : '' %>>Standard (Faster, Lower Cost)</option>
+                                    <option value="hd" <%=config.imageGeneration.quality==='hd' ? 'selected' : '' %>
+                                        >HD
+                                        (Higher Quality, Higher Cost)</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="imageStyle">Image Style</label>
+                                <select id="imageStyle" name="imageStyle">
+                                    <option value="vivid" <%=config.imageGeneration.style==='vivid' ? 'selected' : '' %>
+                                        >Vivid (Hyper-real, Dramatic)</option>
+                                    <option value="natural" <%=config.imageGeneration.style==='natural' ? 'selected'
+                                        : '' %>>Natural (More Natural, Less Hyper-real)</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="imageProvider">Image Provider</label>
+                                <select id="imageProvider" name="imageProvider">
+                                    <optgroup label="AI Image Generation">
+                                        <option value="gpt-image-1.5"
+                                            <%=config.imageGeneration.provider==='gpt-image-1.5' ? 'selected' : '' %>
+                                            >GPT-Image-1.5 (Latest & Best) ⭐</option>
+                                        <option value="gpt-image-1" <%=config.imageGeneration.provider==='gpt-image-1'
+                                            ? 'selected' : '' %>
+                                            >GPT-Image-1 (High Fidelity)</option>
+                                        <option value="gpt-image-1-mini"
+                                            <%=config.imageGeneration.provider==='gpt-image-1-mini' ? 'selected' : '' %>
+                                            >GPT-Image-1-Mini (Cost-Efficient)</option>
+                                        <option value="chatgpt-image-latest"
+                                            <%=config.imageGeneration.provider==='chatgpt-image-latest' ? 'selected'
+                                            : '' %>>ChatGPT Image Latest</option>
+                                        <option value="dall-e-3" <%=config.imageGeneration.provider==='dall-e-3' ||
+                                            config.imageGeneration.provider==='dalle' ? 'selected' : '' %>>DALL-E 3
+                                            (Deprecated)</option>
+                                        <option value="dall-e-2" <%=config.imageGeneration.provider==='dall-e-2'
+                                            ? 'selected' : '' %>>DALL-E 2 (Deprecated)</option>
+                                        <option value="runware" <%=config.imageGeneration.provider==='runware'
+                                            ? 'selected' : '' %>>Runware.ai (Fast & High Quality)</option>
+                                    </optgroup>
+                                    <optgroup label="Stock Photos">
+                                        <option value="unsplash" <%=config.imageGeneration.provider==='unsplash'
+                                            ? 'selected' : '' %>>Unsplash</option>
+                                        <option value="pexels" <%=config.imageGeneration.provider==='pexels'
+                                            ? 'selected' : '' %>>Pexels</option>
+                                        <option value="pixabay" <%=config.imageGeneration.provider==='pixabay'
+                                            ? 'selected' : '' %>>Pixabay</option>
+                                        <option value="google" <%=config.imageGeneration.provider==='google'
+                                            ? 'selected' : '' %>>Google Search</option>
+
+                                    </optgroup>
+                                </select>
+                                <small>Choose AI model or stock photo source for image generation. Yandex requires Cloud
+                                    API keys.</small>
+                            </div>
+
+
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Save Image Settings</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+            </div>
+
+            <div id="tab-keywords" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Keywords Configuration</h2>
+                    </div>
+                    <div class="card-body">
+                        <form id="keywordsForm">
+                            <div class="form-group">
+                                <label for="defaultKeywords">Bulk Keywords (comma-separated)</label>
+                                <textarea id="defaultKeywords" name="defaultKeywords" rows="10"
+                                    placeholder="technology, innovation, AI, machine learning, cloud computing"><%= config.content.defaultKeywords %></textarea>
+                                <small>Keywords used for topic generation and auto-tagging.</small>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Save Keywords</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-prompts" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Instructions & Prompts</h2>
+                    </div>
+                    <div class="card-body">
+                        <form id="promptsForm">
+                            <div class="form-group">
+                                <label for="customPrompt">Custom Article Prompt (Global)</label>
+                                <textarea id="customPrompt" name="customPrompt" rows="4"
+                                    placeholder="Write in a professional tone..."><%= config.content.customPrompt %></textarea>
+                                <small>System prompt appended to all article requests.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="articleInstructions">Article Writing Instructions</label>
+                                <textarea id="articleInstructions" name="articleInstructions" rows="4"
+                                    placeholder="Write in first person, use conversational tone..."><%= config.content.articleInstructions %></textarea>
+                                <small>Specific style guidelines for the AI.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="imageCustomPrompt">Custom Image Prompt (Global)</label>
+                                <textarea id="imageCustomPrompt" name="imageCustomPrompt" rows="3"
+                                    placeholder="Photorealistic, cinematic lighting..."><%= config.content.imageCustomPrompt %></textarea>
+                                <small>Additional context for image generation prompts.</small>
+                            </div>
+
+                            <h3
+                                style="margin-top: 1.5rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
+                                Article Settings</h3>
+                            <div class="form-group">
+                                <label for="articleLength">Article Length (words)</label>
+                                <select id="articleLength" name="articleLength">
+                                    <option value="500-800" <%=config.content.articleLength==='500-800' ? 'selected'
+                                        : '' %>>Short (500-800 words)</option>
+                                    <option value="1000-1500" <%=config.content.articleLength==='1000-1500' ? 'selected'
+                                        : '' %>>Medium (1000-1500 words)</option>
+                                    <option value="2000-2500" <%=config.content.articleLength==='2000-2500' ? 'selected'
+                                        : '' %>>Long (2000-2500 words)</option>
+                                    <option value="3000+" <%=config.content.articleLength==='3000+' ? 'selected' : '' %>
+                                        >Very Long (3000+ words)</option>
+                                </select>
+                                <small>Target word count for generated articles.</small>
+                            </div>
+
+                            <h3
+                                style="margin-top: 1.5rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
+                                Call to Action</h3>
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="includeCallToAction"
+                                        <%=config.content.includeCallToAction ? 'checked' : '' %>>
+                                    <span class="toggle-switch"></span>
+                                    <span>Include Call to Action at End of Article</span>
+                                </label>
+                                <small>Adds a CTA button/link at the end of every article.</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="callToActionText">CTA Button Text</label>
+                                <input type="text" id="callToActionText" name="callToActionText"
+                                    value="<%= config.content.callToActionText %>" placeholder="Learn more">
+                            </div>
+                            <div class="form-group">
+                                <label for="callToActionUrl">CTA Button URL</label>
+                                <input type="url" id="callToActionUrl" name="callToActionUrl"
+                                    value="<%= config.content.callToActionUrl %>"
+                                    placeholder="https://yourwebsite.com/contact">
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Save Prompts</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-seo" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>SEO & Structure Settings</h2>
+                    </div>
+                    <div class="card-body">
+                        <form id="seoForm">
+                            <div class="form-group">
+                                <label for="imagesPerPost">Images Per Post</label>
+                                <input type="number" id="imagesPerPost" name="imagesPerPost" min="0" max="10"
+                                    value="<%= config.content.imagesPerPost %>">
+                                <small>Target number of images (approximate).</small>
+                            </div>
+
+                            <h3 style="margin-top: 1.5rem; color: var(--primary-light);">Internal Linking</h3>
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="includeInternalLinks"
+                                        <%=config.content.includeInternalLinks ? 'checked' : '' %>>
+                                    <span class="toggle-switch"></span>
+                                    <span>Include Internal Links</span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label for="internalLinksCount">Number of Internal Links</label>
+                                <input type="number" id="internalLinksCount" name="internalLinksCount" min="0" max="10"
+                                    value="<%= config.content.internalLinksCount %>">
+                            </div>
+
+                            <h3 style="margin-top: 1.5rem; color: var(--primary-light);">Read Also Section</h3>
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="includeReadAlso" <%=config.content.includeReadAlso
+                                        ? 'checked' : '' %>>
+                                    <span class="toggle-switch"></span>
+                                    <span>Include "Read Also" Section</span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label for="readAlsoCount">Number of Links</label>
+                                <input type="number" id="readAlsoCount" name="readAlsoCount" min="0" max="10"
+                                    value="<%= config.content.readAlsoCount %>">
+                            </div>
+
+
+                            <h3 style="margin-top: 1.5rem; color: var(--primary-light);">Outbound Links</h3>
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="includeOutboundLinks"
+                                        <%=config.content.includeOutboundLinks ? 'checked' : '' %>>
+                                    <span class="toggle-switch"></span>
+                                    <span>Include Outbound/Reference Links</span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label for="outboundLinksCount">Number of Outbound Links</label>
+                                <input type="number" id="outboundLinksCount" name="outboundLinksCount" min="0" max="10"
+                                    value="<%= config.content.outboundLinksCount %>">
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Save SEO Settings</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-api" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>API Keys Configuration</h2>
+                    </div>
+                    <div class="card-body">
+                        <form id="apiKeysForm">
+                            <h3 style="margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">Editor
+                                Configuration</h3>
+                            <div class="form-group">
+                                <label for="tinymceApiKey">TinyMCE API Key</label>
+                                <input type="password" id="tinymceApiKey" name="tinymceApiKey"
+                                    value="<%= config.tinymce ? config.tinymce.apiKey : '' %>"
+                                    placeholder="Enter TinyMCE API Key">
+                                <small>Required to remove the "API Key Required" warning. Get a free key from <a
+                                        href="https://www.tiny.cloud/my-account/dashboard/" target="_blank">Tiny
+                                        Cloud</a>.</small>
+                            </div>
+
+                            <h3
+                                style="margin-top: 2rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
+                                YouTube API</h3>
+                            <div class="form-group">
+                                <label for="youtubeApiKey">YouTube Data API Key</label>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <input type="password" id="youtubeApiKey" name="youtubeApiKey"
+                                        value="<%= config.youtube.apiKey %>" placeholder="Enter YouTube API Key"
+                                        style="flex: 1;">
+                                    <button type="button" class="btn btn-secondary" onclick="testYouTube()"
+                                        style="white-space: nowrap;">Test Connection</button>
+                                </div>
+                                <small>Required for video search and embedding. Get it from <a
+                                        href="https://console.cloud.google.com/" target="_blank">Google Cloud
+                                        Console</a></small>
+                            </div>
+
+                            <h3
+                                style="margin-top: 2rem; margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">
+                                Stock Image APIs</h3>
+                            <div class="form-group">
+                                <label for="unsplashApiKey">Unsplash Access Key</label>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <input type="password" id="unsplashApiKey" name="unsplashApiKey"
+                                        value="<%= config.stockImages.unsplashApiKey %>"
+                                        placeholder="Enter Unsplash Access Key" style="flex: 1;">
+                                    <button type="button" class="btn btn-secondary" onclick="testUnsplash()"
+                                        style="white-space: nowrap;">Test Connection</button>
+                                </div>
+                                <small>Get your key from <a href="https://unsplash.com/developers"
+                                        target="_blank">Unsplash Developers</a></small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pexelsApiKey">Pexels API Key</label>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <input type="password" id="pexelsApiKey" name="pexelsApiKey"
+                                        value="<%= config.stockImages.pexelsApiKey %>"
+                                        placeholder="Enter Pexels API Key" style="flex: 1;">
+                                    <button type="button" class="btn btn-secondary" onclick="testPexels()"
+                                        style="white-space: nowrap;">Test Connection</button>
+                                </div>
+                                <small>Get your key from <a href="https://www.pexels.com/api/" target="_blank">Pexels
+                                        API</a></small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pixabayApiKey">Pixabay API Key</label>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <input type="password" id="pixabayApiKey" name="pixabayApiKey"
+                                        value="<%= config.stockImages.pixabayApiKey %>"
+                                        placeholder="Enter Pixabay API Key" style="flex: 1;">
+                                    <button type="button" class="btn btn-secondary" onclick="testPixabay()"
+                                        style="white-space: nowrap;">Test Connection</button>
+                                </div>
+                                <small>Get your key from <a href="https://pixabay.com/api/docs/" target="_blank">Pixabay
+                                        API</a></small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="googleApiKey">Google Custom Search API Key</label>
+                                <input type="password" id="googleApiKey" name="googleApiKey"
+                                    value="<%= config.stockImages.googleApiKey || '' %>"
+                                    placeholder="Enter Google Cloud API Key">
+                                <small>Enable "Custom Search API" in Google Cloud Console.</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="googleSearchEngineId">Google Search Engine ID (CX)</label>
+                                <input type="text" id="googleSearchEngineId" name="googleSearchEngineId"
+                                    value="<%= config.stockImages.googleSearchEngineId || '' %>"
+                                    placeholder="Enter Search Engine ID (cx)">
+                                <small>Get ID from <a href="https://programmablesearchengine.google.com/"
+                                        target="_blank">Programmable Search Engine</a>. Enable "Image search" in
+                                    settings.</small>
+                            </div>
+
+
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Save API Keys</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-automation" class="tab-content active">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Automation Settings</h2>
+                    </div>
+                    <div class="card-body">
+                        <form id="automationSettingsForm">
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="automationEnabled" <%=config.automation.enabled
+                                        ? 'checked' : '' %>>
+                                    <span class="toggle-switch"></span>
+                                    <span>Enable Automatic Publishing</span>
+                                </label>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="schedule">Publishing Schedule</label>
+                                <select id="schedule" name="schedule" onchange="toggleScheduleOptions()">
+                                    <option value="minutes" <%=config.automation.schedule==='minutes' ? 'selected' : ''
+                                        %>>Every X Minutes</option>
+                                    <option value="hourly" <%=config.automation.schedule==='hourly' ? 'selected' : '' %>
+                                        >Hourly</option>
+                                    <option value="daily" <%=config.automation.schedule==='daily' ? 'selected' : '' %>
+                                        >Daily</option>
+                                    <option value="weekly" <%=config.automation.schedule==='weekly' ? 'selected' : '' %>
+                                        >Weekly</option>
+                                    <option value="cron" <%=config.automation.schedule==='cron' ? 'selected' : '' %>
+                                        >Custom Cron Schedule</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group" id="minutesGroup"
+                                style="display: <%= config.automation.schedule === 'minutes' ? 'block' : 'none' %>;">
+                                <label for="minutesInterval">Publish Every (Minutes)</label>
+                                <select id="minutesInterval" name="minutesInterval">
+                                    <option value="1" <%=config.automation.minutesInterval===1 ? 'selected' : '' %>
+                                        >Every 1 Minute</option>
+                                    <option value="5" <%=config.automation.minutesInterval===5 ? 'selected' : '' %>
+                                        >Every 5 Minutes</option>
+                                    <option value="10" <%=config.automation.minutesInterval===10 ? 'selected' : '' %>
+                                        >Every 10 Minutes</option>
+                                    <option value="15" <%=config.automation.minutesInterval===15 ? 'selected' : '' %>
+                                        >Every 15 Minutes</option>
+                                    <option value="30" <%=config.automation.minutesInterval===30 ? 'selected' : '' %>
+                                        >Every 30 Minutes</option>
+                                </select>
+                                <small>Articles will be published at regular minute intervals</small>
+                            </div>
+
+                            <div class="form-group" id="cronGroup"
+                                style="display: <%= config.automation.schedule === 'cron' ? 'block' : 'none' %>;">
+                                <label for="cronExpression">Cron Expression</label>
+                                <input type="text" id="cronExpression" name="cronExpression"
+                                    value="<%= config.automation.cronExpression || '0 9 * * *' %>"
+                                    placeholder="e.g. 0 9 * * *">
+                                <small>Standard cron syntax. <a href="https://crontab.guru/" target="_blank">Need
+                                        help?</a></small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="dailyArticleLimit">Daily Article Limit</label>
+                                <input type="number" id="dailyArticleLimit" name="dailyArticleLimit" min="1" max="100"
+                                    value="<%= config.automation.dailyArticleLimit %>">
+                                <small>Maximum number of articles to publish per day</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="autoCreateCategories"
+                                        <%=config.automation.autoCreateCategories ? 'checked' : '' %>>
+                                    <span class="toggle-switch"></span>
+                                    <span>Auto-Create Categories</span>
+                                </label>
+                                <small>Automatically create WordPress categories if they don't exist</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="autoCreateTags" <%=config.automation.autoCreateTags
+                                        ? 'checked' : '' %>>
+                                    <span class="toggle-switch"></span>
+                                    <span>Auto-Create Tags</span>
+                                </label>
+                                <small>Automatically create WordPress tags if they don't exist</small>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="button" class="btn btn-secondary" onclick="triggerAutomationNow()"
+                                    style="margin-right: 1rem;">
+                                    🚀 Trigger Single Article Now
+                                </button>
+                                <button type="submit" class="btn btn-primary">Save Automation Settings</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-logs" class="tab-content">
+                <div class="card">
+                    <div class="card-header"
+                        style="display: flex; justify-content: space-between; align-items: center;">
+                        <h2>System Logs</h2>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button type="button" class="btn btn-secondary" onclick="fetchSystemLogs()">Refresh Logs</button>
+                            <button type="button" class="btn btn-danger" onclick="clearSystemLogs()" style="border: 1px solid #ef4444; color: #ef4444; background: transparent;">Clear Logs</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="logs-container"
+                            style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; height: 500px; overflow-y: auto; font-family: monospace; font-size: 0.9rem;">
+                            <p>Loading logs...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="notification" class="notification" style="display: none;"></div>
+        </div>
         </div>
 
         <script src="/js/settings.js"></script>
