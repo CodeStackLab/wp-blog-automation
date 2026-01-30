@@ -16,7 +16,7 @@
         "express": "^4.18.2",
         "express-session": "^1.17.3",
         "jimp": "^1.6.0",
-        "node-cron": "^4.2.1",
+        "node-cron": "3.0.3",
         "sharp": "^0.34.5"
     },
     "devDependencies": {

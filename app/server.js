@@ -28,6 +28,8 @@ Target 67 characters or less
 Negative/emotional language is intentional and preferred
 Do not repeat the focus keyword excessively in the title
 
+✅ TITLE RULES\n- NEVER start titles with "From Sugar Land to Austin" or "From [City] to [City]".\n- Use varied structures (Questions, Lists, Direct Statements).
+
 ✅ FOCUS KEYWORD RULES (STRICT)
 Focus keyword must appear:
 At the start of the H1
@@ -551,7 +553,7 @@ function initializeScheduler() {
 
     // Calculate time slots for staggered publishing
     // Distribute articles evenly throughout the day (9 AM to 9 PM = 12 hours)
-    const startHour = 9;  // 9 AM
+    const startHour = 14;  // 9 AM
     const endHour = 21;   // 9 PM
     const totalHours = endHour - startHour;
 
@@ -567,7 +569,7 @@ function initializeScheduler() {
         if (dailyLimit === 1) {
             hour = startHour; // Single article at 9 AM
         } else {
-            hour = Math.floor(startHour + (i * hourGap));
+            hour = Math.floor(startHour + (i * hourGap)) % 24;
         }
 
         // Create cron expression for this time slot (minute hour * * *)
