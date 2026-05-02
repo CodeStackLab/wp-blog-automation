@@ -20,6 +20,7 @@
                     <button class="tab-btn active" data-tab="tab-automation">Automation Settings</button>
                     <button class="tab-btn" data-tab="tab-keywords">Keywords List</button>
                     <button class="tab-btn" data-tab="tab-prompts">Custom Prompts</button>
+                    <button class="tab-btn" data-tab="tab-social">Social Integration</button>
                     <button class="tab-btn" data-tab="tab-image">Image Generation</button>
                     <button class="tab-btn" data-tab="tab-seo">SEO Config</button>
                     <button class="tab-btn" data-tab="tab-ai">AI Settings</button>
@@ -342,6 +343,172 @@
                                     style="color: var(--danger); margin-top: 0.5rem; display: none;">
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-social" class="tab-content">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Social Media Integration</h2>
+                        </div>
+                        <div class="card-body">
+                            <form id="socialSettingsForm">
+                                <h3 style="margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">TikTok via Buffer Integration</h3>
+                                <div class="form-group">
+                                    <label for="bufferAccessToken">Buffer Access Token</label>
+                                    <input type="password" id="bufferAccessToken" name="bufferAccessToken"
+                                        value="<%= config.social && config.social.buffer ? config.social.buffer.accessToken : '' %>"
+                                        placeholder="Enter Buffer Access Token">
+                                    <small>Subscription plan: TikTok channel ($6/mo). Connect TikTok to Buffer, then provide API Access.</small>
+                                </div>
+
+                                <hr style="margin: 2rem 0; border: 0; border-top: 1px solid var(--border-color);">
+                                <h3 style="margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">Quick Connect (OAuth)</h3>
+                                <p style="margin-bottom: 1rem; color: var(--text-muted); font-size: 0.9rem;">
+                                    Connect your social accounts with one click. No need to manually enter API keys.
+                                </p>
+                                
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                                    <button type="button" class="btn btn-oauth" style="background: #1877f2; color: white; display: flex; align-items: center; justify-content: center; gap: 0.5rem;" onclick="connectOAuth('facebook')">
+                                        <span style="font-size: 1.2rem;">📘</span>
+                                        <span>Connect Facebook</span>
+                                        <span id="fb-status" style="margin-left: auto;"></span>
+                                    </button>
+                                    
+                                    <button type="button" class="btn btn-oauth" style="background: linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%); color: white; display: flex; align-items: center; justify-content: center; gap: 0.5rem;" onclick="connectOAuth('instagram')">
+                                        <span style="font-size: 1.2rem;">📷</span>
+                                        <span>Connect Instagram</span>
+                                        <span id="ig-status" style="margin-left: auto;"></span>
+                                    </button>
+                                    
+                                    <button type="button" class="btn btn-oauth" style="background: #000000; color: white; display: flex; align-items: center; justify-content: center; gap: 0.5rem;" onclick="connectOAuth('twitter')">
+                                        <span style="font-size: 1.2rem;">🐦</span>
+                                        <span>Connect Twitter</span>
+                                        <span id="tw-status" style="margin-left: auto;"></span>
+                                    </button>
+                                    
+                                    <button type="button" class="btn btn-oauth" style="background: #0077b5; color: white; display: flex; align-items: center; justify-content: center; gap: 0.5rem;" onclick="connectOAuth('linkedin')">
+                                        <span style="font-size: 1.2rem;">💼</span>
+                                        <span>Connect LinkedIn</span>
+                                        <span id="li-status" style="margin-left: auto;"></span>
+                                    </button>
+                                    
+                                    <button type="button" class="btn btn-oauth" style="background: #ff0000; color: white; display: flex; align-items: center; justify-content: center; gap: 0.5rem;" onclick="connectOAuth('youtube')">
+                                        <span style="font-size: 1.2rem;">📺</span>
+                                        <span>Connect Youtube</span>
+                                        <span id="yt-status" style="margin-left: auto;"></span>
+                                    </button>
+                                </div>
+
+                                <hr style="margin: 2rem 0; border: 0; border-top: 1px solid var(--border-color);">
+                                <h3 style="margin-bottom: 1rem; font-size: 1rem; color: var(--primary-light);">Manual API Integrations</h3>
+                                <p style="margin-bottom: 1rem; color: var(--text-muted); font-size: 0.9rem;">
+                                    Advanced: Manually enter API credentials if you prefer not to use OAuth.
+                                </p>
+                                
+                                <h4 style="margin: 1rem 0 0.5rem; font-size: 0.9rem;">Facebook</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div class="form-group">
+                                        <label for="fbAppId">App ID</label>
+                                        <input type="text" id="fbAppId" name="fbAppId" value="<%= config.social && config.social.facebook ? config.social.facebook.appId : '' %>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="fbAppSecret">App Secret</label>
+                                        <input type="password" id="fbAppSecret" name="fbAppSecret" value="<%= config.social && config.social.facebook ? config.social.facebook.appSecret : '' %>">
+                                    </div>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div class="form-group">
+                                        <label for="fbPageId">Page ID</label>
+                                        <input type="text" id="fbPageId" name="fbPageId" value="<%= config.social && config.social.facebook ? config.social.facebook.pageId : '' %>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="fbAccessToken">Access Token</label>
+                                        <input type="password" id="fbAccessToken" name="fbAccessToken" value="<%= config.social && config.social.facebook ? config.social.facebook.accessToken : '' %>">
+                                    </div>
+                                </div>
+
+                                <h4 style="margin: 1.5rem 0 0.5rem; font-size: 0.9rem;">Instagram</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div class="form-group">
+                                        <label for="igAppId">App ID</label>
+                                        <input type="text" id="igAppId" name="igAppId" value="<%= config.social && config.social.instagram ? config.social.instagram.appId : '' %>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="igAppSecret">App Secret</label>
+                                        <input type="password" id="igAppSecret" name="igAppSecret" value="<%= config.social && config.social.instagram ? config.social.instagram.appSecret : '' %>">
+                                    </div>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div class="form-group">
+                                        <label for="igPageId">Page ID (Business Account ID)</label>
+                                        <input type="text" id="igPageId" name="igPageId" value="<%= config.social && config.social.instagram ? config.social.instagram.pageId : '' %>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="igAccessToken">Access Token</label>
+                                        <input type="password" id="igAccessToken" name="igAccessToken" value="<%= config.social && config.social.instagram ? config.social.instagram.accessToken : '' %>">
+                                    </div>
+                                </div>
+
+                                <h4 style="margin: 1.5rem 0 0.5rem; font-size: 0.9rem;">Twitter (X)</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div class="form-group">
+                                        <label for="twApiKey">API Key</label>
+                                        <input type="text" id="twApiKey" name="twApiKey" value="<%= config.social && config.social.twitter ? config.social.twitter.apiKey : '' %>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="twApiSecret">API Secret</label>
+                                        <input type="password" id="twApiSecret" name="twApiSecret" value="<%= config.social && config.social.twitter ? config.social.twitter.apiSecret : '' %>">
+                                    </div>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div class="form-group">
+                                        <label for="twAccessToken">Access Token</label>
+                                        <input type="password" id="twAccessToken" name="twAccessToken" value="<%= config.social && config.social.twitter ? config.social.twitter.accessToken : '' %>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="twAccessSecret">Access Secret</label>
+                                        <input type="password" id="twAccessSecret" name="twAccessSecret" value="<%= config.social && config.social.twitter ? config.social.twitter.accessSecret : '' %>">
+                                    </div>
+                                </div>
+
+                                <h4 style="margin: 1.5rem 0 0.5rem; font-size: 0.9rem;">LinkedIn</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div class="form-group">
+                                        <label for="liAppId">App ID (Client ID)</label>
+                                        <input type="text" id="liAppId" name="liAppId" value="<%= config.social && config.social.linkedin ? config.social.linkedin.appId : '' %>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="liAppSecret">App Secret (Client Secret)</label>
+                                        <input type="password" id="liAppSecret" name="liAppSecret" value="<%= config.social && config.social.linkedin ? config.social.linkedin.appSecret : '' %>">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="liAccessToken">Access Token</label>
+                                    <input type="password" id="liAccessToken" name="liAccessToken" value="<%= config.social && config.social.linkedin ? config.social.linkedin.accessToken : '' %>">
+                                </div>
+
+                                <h4 style="margin: 1.5rem 0 0.5rem; font-size: 0.9rem;">Youtube</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div class="form-group">
+                                        <label for="ytClientId">Client ID</label>
+                                        <input type="text" id="ytClientId" name="ytClientId" value="<%= config.social && config.social.youtube ? config.social.youtube.clientId : '' %>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="ytClientSecret">Client Secret</label>
+                                        <input type="password" id="ytClientSecret" name="ytClientSecret" value="<%= config.social && config.social.youtube ? config.social.youtube.clientSecret : '' %>">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="ytRefreshToken">Refresh Token</label>
+                                    <input type="password" id="ytRefreshToken" name="ytRefreshToken" value="<%= config.social && config.social.youtube ? config.social.youtube.refreshToken : '' %>">
+                                </div>
+
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-primary">Save Social Settings</button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>

@@ -690,9 +690,111 @@ async function clearSystemLogs() {
     }
 }
 
+// Social settings form
+document.getElementById('socialSettingsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = {
+        social: {
+            buffer: {
+                accessToken: formData.get('bufferAccessToken')
+            },
+            facebook: {
+                appId: formData.get('fbAppId'),
+                appSecret: formData.get('fbAppSecret'),
+                pageId: formData.get('fbPageId'),
+                accessToken: formData.get('fbAccessToken')
+            },
+            instagram: {
+                appId: formData.get('igAppId'),
+                appSecret: formData.get('igAppSecret'),
+                pageId: formData.get('igPageId'),
+                accessToken: formData.get('igAccessToken')
+            },
+            twitter: {
+                apiKey: formData.get('twApiKey'),
+                apiSecret: formData.get('twApiSecret'),
+                accessToken: formData.get('twAccessToken'),
+                accessSecret: formData.get('twAccessSecret')
+            },
+            linkedin: {
+                appId: formData.get('liAppId'),
+                appSecret: formData.get('liAppSecret'),
+                accessToken: formData.get('liAccessToken')
+            },
+            youtube: {
+                clientId: formData.get('ytClientId'),
+                clientSecret: formData.get('ytClientSecret'),
+                refreshToken: formData.get('ytRefreshToken')
+            }
+        }
+    };
+    await saveSettings(data, 'Social');
+});
+
+// OAuth Social Connection
+async function connectOAuth(platform) {
+    try {
+        // Open OAuth window
+        const width = 600;
+        const height = 700;
+        const left = (screen.width / 2) - (width / 2);
+        const top = (screen.height / 2) - (height / 2);
+
+        const oauthWindow = window.open(
+            `/auth/${platform}`,
+            'OAuth',
+            `width=${width},height=${height},left=${left},top=${top}`
+        );
+
+        // Poll for window close
+        const pollTimer = window.setInterval(() => {
+            if (oauthWindow.closed) {
+                window.clearInterval(pollTimer);
+                // Refresh connection status
+                checkOAuthStatus();
+                showNotification(`${platform} connection completed!`, 'success');
+            }
+        }, 1000);
+    } catch (error) {
+        showNotification(`Failed to connect ${platform}: ` + error.message, 'error');
+    }
+}
+
+// Check OAuth connection status
+async function checkOAuthStatus() {
+    try {
+        const response = await fetch('/api/oauth/status');
+        const result = await response.json();
+
+        if (result.success) {
+            // Update status indicators
+            const platforms = ['facebook', 'instagram', 'twitter', 'linkedin', 'youtube'];
+            const statusMap = {
+                'facebook': 'fb-status',
+                'instagram': 'ig-status',
+                'twitter': 'tw-status',
+                'linkedin': 'li-status',
+                'youtube': 'yt-status'
+            };
+
+            platforms.forEach(platform => {
+                const statusEl = document.getElementById(statusMap[platform]);
+                if (statusEl && result.connections[platform]) {
+                    statusEl.textContent = '✓';
+                    statusEl.style.color = '#10b981';
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Failed to check OAuth status:', error);
+    }
+}
+
 // Auto-load logs if on the logs tab (rudimentary check or init)
 document.addEventListener('DOMContentLoaded', () => {
     // ... existing init ...
+    checkOAuthStatus();
 
     // Hook into tab clicks to auto-refresh logs when clicking "System Logs"
     const logTabBtn = document.querySelector('button[data-tab="tab-logs"]');

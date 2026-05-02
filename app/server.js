@@ -653,6 +653,23 @@ app.get('/api/config', requireAuth, (req, res) => {
     safeConfig.stockImages.pexelsApiKey = config.stockImages.pexelsApiKey ? '********' : '';
     safeConfig.stockImages.pixabayApiKey = config.stockImages.pixabayApiKey ? '********' : '';
     safeConfig.youtube.apiKey = config.youtube.apiKey ? '********' : '';
+
+    // Social masking
+    if (safeConfig.social) {
+        if (safeConfig.social.buffer && safeConfig.social.buffer.accessToken) safeConfig.social.buffer.accessToken = '********';
+        if (safeConfig.social.facebook && safeConfig.social.facebook.appSecret) safeConfig.social.facebook.appSecret = '********';
+        if (safeConfig.social.facebook && safeConfig.social.facebook.accessToken) safeConfig.social.facebook.accessToken = '********';
+        if (safeConfig.social.instagram && safeConfig.social.instagram.appSecret) safeConfig.social.instagram.appSecret = '********';
+        if (safeConfig.social.instagram && safeConfig.social.instagram.accessToken) safeConfig.social.instagram.accessToken = '********';
+        if (safeConfig.social.twitter && safeConfig.social.twitter.apiSecret) safeConfig.social.twitter.apiSecret = '********';
+        if (safeConfig.social.twitter && safeConfig.social.twitter.accessToken) safeConfig.social.twitter.accessToken = '********';
+        if (safeConfig.social.twitter && safeConfig.social.twitter.accessSecret) safeConfig.social.twitter.accessSecret = '********';
+        if (safeConfig.social.linkedin && safeConfig.social.linkedin.appSecret) safeConfig.social.linkedin.appSecret = '********';
+        if (safeConfig.social.linkedin && safeConfig.social.linkedin.accessToken) safeConfig.social.linkedin.accessToken = '********';
+        if (safeConfig.social.youtube && safeConfig.social.youtube.clientSecret) safeConfig.social.youtube.clientSecret = '********';
+        if (safeConfig.social.youtube && safeConfig.social.youtube.refreshToken) safeConfig.social.youtube.refreshToken = '********';
+    }
+
     res.json(safeConfig);
 });
 
@@ -682,7 +699,9 @@ app.post('/api/settings', requireAuth, async (req, res) => {
             dailyArticleLimit,
             cronExpression,
             // New automation settings
-            automationEnabled, automationSchedule, autoCreateCategories, autoCreateTags
+            automationEnabled, automationSchedule, autoCreateCategories, autoCreateTags,
+            // New social settings
+            social
         } = req.body;
 
         if (wpSiteUrl !== undefined) config.wordpress.siteUrl = wpSiteUrl;
@@ -744,6 +763,23 @@ app.post('/api/settings', requireAuth, async (req, res) => {
         if (autoCreateCategories !== undefined) config.automation.autoCreateCategories = autoCreateCategories;
         if (autoCreateTags !== undefined) config.automation.autoCreateTags = autoCreateTags;
 
+        // Social Settings handling with masking support
+        if (social) {
+            if (!config.social) config.social = {};
+
+            const platforms = ['buffer', 'facebook', 'instagram', 'twitter', 'linkedin', 'youtube'];
+            platforms.forEach(platform => {
+                if (social[platform]) {
+                    if (!config.social[platform]) config.social[platform] = {};
+                    for (const key in social[platform]) {
+                        if (social[platform][key] !== '********') {
+                            config.social[platform][key] = social[platform][key];
+                        }
+                    }
+                }
+            });
+        }
+
         saveConfig(); // Persist changes
 
         // Restart scheduler if automation settings changed
@@ -755,6 +791,165 @@ app.post('/api/settings', requireAuth, async (req, res) => {
     } catch (error) {
         console.error('Error saving settings:', error);
         res.status(500).json({ success: false, message: 'Failed to save settings' });
+    }
+});
+
+// OAuth Status Check Endpoint
+app.get('/api/oauth/status', requireAuth, (req, res) => {
+    try {
+        const connections = {
+            facebook: !!(config.social?.facebook?.accessToken),
+            instagram: !!(config.social?.instagram?.accessToken),
+            twitter: !!(config.social?.twitter?.accessToken),
+            linkedin: !!(config.social?.linkedin?.accessToken),
+            youtube: !!(config.social?.youtube?.refreshToken)
+        };
+        res.json({ success: true, connections });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// OAuth Initiation Routes
+app.get('/auth/:platform', requireAuth, (req, res) => {
+    const { platform } = req.params;
+
+    try {
+        let authUrl = '';
+        const redirectUri = `${req.protocol}://${req.get('host')}/auth/${platform}/callback`;
+
+        switch (platform) {
+            case 'facebook':
+                if (!config.social?.facebook?.appId) {
+                    return res.send('<script>alert("Please configure Facebook App ID first in Manual API settings"); window.close();</script>');
+                }
+                authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${config.social.facebook.appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=pages_manage_posts,pages_read_engagement,instagram_basic,instagram_content_publish&response_type=code`;
+                break;
+
+            case 'instagram':
+                if (!config.social?.instagram?.appId) {
+                    return res.send('<script>alert("Please configure Instagram App ID first in Manual API settings"); window.close();</script>');
+                }
+                authUrl = `https://api.instagram.com/oauth/authorize?client_id=${config.social.instagram.appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user_profile,user_media&response_type=code`;
+                break;
+
+            case 'twitter':
+                if (!config.social?.twitter?.apiKey) {
+                    return res.send('<script>alert("Please configure Twitter API Key first in Manual API settings"); window.close();</script>');
+                }
+                authUrl = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${config.social.twitter.apiKey}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=tweet.read%20tweet.write%20users.read&state=state123&code_challenge=challenge&code_challenge_method=plain`;
+                break;
+
+            case 'linkedin':
+                if (!config.social?.linkedin?.appId) {
+                    return res.send('<script>alert("Please configure LinkedIn App ID first in Manual API settings"); window.close();</script>');
+                }
+                authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${config.social.linkedin.appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=w_member_social%20r_liteprofile`;
+                break;
+
+            case 'youtube':
+                if (!config.social?.youtube?.clientId) {
+                    return res.send('<script>alert("Please configure Youtube Client ID first in Manual API settings"); window.close();</script>');
+                }
+                authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${config.social.youtube.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=https://www.googleapis.com/auth/youtube.upload&access_type=offline`;
+                break;
+
+            default:
+                return res.status(400).send('Invalid platform');
+        }
+
+        res.redirect(authUrl);
+    } catch (error) {
+        res.status(500).send(`<script>alert("OAuth error: ${error.message}"); window.close();</script>`);
+    }
+});
+
+// OAuth Callback Routes
+app.get('/auth/:platform/callback', requireAuth, async (req, res) => {
+    const { platform } = req.params;
+    const { code } = req.query;
+
+    if (!code) {
+        return res.send('<script>alert("Authorization failed: No code received"); window.close();</script>');
+    }
+
+    try {
+        const redirectUri = `${req.protocol}://${req.get('host')}/auth/${platform}/callback`;
+        let tokenResponse;
+
+        switch (platform) {
+            case 'facebook':
+                tokenResponse = await axios.get(`https://graph.facebook.com/v18.0/oauth/access_token`, {
+                    params: {
+                        client_id: config.social.facebook.appId,
+                        client_secret: config.social.facebook.appSecret,
+                        redirect_uri: redirectUri,
+                        code: code
+                    }
+                });
+                config.social.facebook.accessToken = tokenResponse.data.access_token;
+                config.social.facebook.connectionMethod = 'oauth';
+                break;
+
+            case 'instagram':
+                tokenResponse = await axios.post(`https://api.instagram.com/oauth/access_token`, {
+                    client_id: config.social.instagram.appId,
+                    client_secret: config.social.instagram.appSecret,
+                    grant_type: 'authorization_code',
+                    redirect_uri: redirectUri,
+                    code: code
+                });
+                config.social.instagram.accessToken = tokenResponse.data.access_token;
+                config.social.instagram.connectionMethod = 'oauth';
+                break;
+
+            case 'twitter':
+                tokenResponse = await axios.post(`https://api.twitter.com/2/oauth2/token`, {
+                    code: code,
+                    grant_type: 'authorization_code',
+                    client_id: config.social.twitter.apiKey,
+                    redirect_uri: redirectUri,
+                    code_verifier: 'challenge'
+                }, {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+                config.social.twitter.accessToken = tokenResponse.data.access_token;
+                config.social.twitter.connectionMethod = 'oauth';
+                break;
+
+            case 'linkedin':
+                tokenResponse = await axios.post(`https://www.linkedin.com/oauth/v2/accessToken`, null, {
+                    params: {
+                        grant_type: 'authorization_code',
+                        code: code,
+                        redirect_uri: redirectUri,
+                        client_id: config.social.linkedin.appId,
+                        client_secret: config.social.linkedin.appSecret
+                    }
+                });
+                config.social.linkedin.accessToken = tokenResponse.data.access_token;
+                config.social.linkedin.connectionMethod = 'oauth';
+                break;
+
+            case 'youtube':
+                tokenResponse = await axios.post(`https://oauth2.googleapis.com/token`, {
+                    code: code,
+                    client_id: config.social.youtube.clientId,
+                    client_secret: config.social.youtube.clientSecret,
+                    redirect_uri: redirectUri,
+                    grant_type: 'authorization_code'
+                });
+                config.social.youtube.accessToken = tokenResponse.data.access_token;
+                config.social.youtube.refreshToken = tokenResponse.data.refresh_token;
+                config.social.youtube.connectionMethod = 'oauth';
+                break;
+        }
+
+        saveConfig();
+        res.send('<script>alert("Successfully connected!"); window.close();</script>');
+    } catch (error) {
+        console.error(`OAuth callback error for ${platform}:`, error.response?.data || error.message);
+        res.send(`<script>alert("Failed to connect: ${error.message}"); window.close();</script>`);
     }
 });
 
@@ -1225,7 +1420,7 @@ async function generateArticleLogic(params) {
       "meta_description": "string (Optimized for SEO)",
       "tags": ["array", "of", "strings"],
       "featured_image": {
-         "prompt": "string (Detailed prompt for AI generator - detailed, photorealistic, no text)",
+         "prompt": "string (A photorealistic professional photograph, absolutely NO text, NO labels, NO diagrams, NO overlays, NO pointers, NO annotations, NO symbols, NO numbers, natural cinematic lighting)",
          "alt_text": "string",
          "title": "string",
          "caption": "string",
@@ -2291,7 +2486,7 @@ async function generateImageForStream(topic, config) {
         // We'll use the mapping logic from the /api/generate-image endpoint if possible, 
         // or just stick to 1024x1024/landscape for safety unless specific DALL-E 3 support is added here.
         // To be safe and consistent with previous code:
-        const prompt = `A professional blog featured image for an article about: ${topic}. Style: ${style}. High quality.`;
+        const prompt = `A professional, photorealistic blog featured image for an article about: ${topic}. Absolutely NO text, no labels, no words. Style: ${style}. High quality, cinematic lighting.`;
 
         const response = await axios.post('https://api.openai.com/v1/images/generations', {
             model: "dall-e-3",
@@ -2379,7 +2574,7 @@ async function generateAiImage(query, config, overridePrompt = null) {
             prompt: prompt,
             n: 1,
             size: "1792x1024",
-            quality: "standard",
+            quality: "hd",
             style: "natural"
         }, {
             headers: { 'Authorization': `Bearer ${config.openai.apiKey}` }
